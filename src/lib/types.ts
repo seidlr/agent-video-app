@@ -2,6 +2,10 @@
 // and workers (segment/detect/transcribe/...) can import from here without pulling in React
 // or the store.
 
+// Multi-project workspaces are out of scope (see the plan's Out of Scope / Deferred Ideas);
+// everything lives under one fixed project id today.
+export const DEFAULT_PROJECT_ID = 'default';
+
 export type AssetKind = 'file' | 'url' | 'youtube' | 'sample';
 
 export interface Asset {

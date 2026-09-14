@@ -1,10 +1,15 @@
 import Dexie, { type Table } from 'dexie';
-import type { Asset, Box, Chapter, Clip, Note, Track, TranscriptSegment } from '../lib/types';
+import type { Asset, AssetKind, Box, Chapter, Clip, Note, Track, TranscriptSegment } from '../lib/types';
 
 export interface ProjectRow {
   id: string;
   name: string;
   theme: 'light' | 'dark' | 'system';
+  /** The last source loaded (any kind), so a full page reload can restore it without the user
+   * re-selecting it from the Library -- see src/store/library.ts save/getLastSource and Task 3's
+   * DoD ("A dropped 50 MB file appears in the Library and plays after a full page reload without
+   * re-selecting it"). */
+  lastSource?: { kind: AssetKind; id?: string; url?: string };
   createdAt: number;
   updatedAt: number;
 }

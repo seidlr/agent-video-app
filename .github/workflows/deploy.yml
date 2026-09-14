@@ -38,7 +38,10 @@ jobs:
         run: npm test
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        # 'chrome' (real Google Chrome), not the default bundled Chromium, which ships without
+        # H.264/AAC decode support -- every sample/fixture video in this app needs it. See
+        # playwright.config.ts's channel:'chrome' comment.
+        run: npx playwright install --with-deps chrome
 
       - name: End-to-end tests
         # ML-tagged scenarios (segmentation/detection/transcription/VLM/effects) need a real

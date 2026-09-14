@@ -1,7 +1,8 @@
 import { createStore as createVanillaStore } from 'zustand/vanilla';
 import { useStore } from 'zustand/react';
 import { detectCapabilities, type Capabilities } from '../lib/capabilities';
-import type { Asset, Box, Chapter, Clip, Note, ToolCall, Track, TranscriptSegment } from '../lib/types';
+import type { Box, Chapter, Clip, Note, ToolCall, Track, TranscriptSegment } from '../lib/types';
+import type { ResolvedSource } from '../media/source';
 
 export interface PlayerState {
   currentTime: number;
@@ -44,8 +45,26 @@ export interface StorageState {
   quota: number;
 }
 
+/**
+ * The subset of @vidstack/react's MediaPlayerInstance the store's imperative player actions
+ * need. Kept as a minimal structural interface (not an import from @vidstack/react) so the
+ * store stays testable without a real player instance -- MediaPlayerInstance satisfies this
+ * shape structurally, so VideoStage can register its real playerRef.current with no adapter.
+ */
+export interface PlayerHandle {
+  currentTime: number;
+  volume: number;
+  muted: boolean;
+  playbackRate: number;
+  paused: boolean;
+  play(): Promise<void>;
+  pause(): void;
+  addEventListener(type: string, listener: () => void, options?: { once?: boolean }): void;
+  removeEventListener(type: string, listener: () => void): void;
+}
+
 export interface StudioState {
-  source: Asset | null;
+  source: ResolvedSource | null;
   player: PlayerState;
   frames: { id: string; time: number; kind: string }[];
   boxes: Box[];
@@ -59,7 +78,7 @@ export interface StudioState {
   capabilities: Capabilities;
   storage: StorageState;
 
-  setSource(asset: Asset | null): void;
+  setSource(source: ResolvedSource | null): void;
 
   setCurrentTime(t: number): void;
   setDuration(d: number): void;
@@ -96,6 +115,19 @@ export interface StudioState {
   setAgentTransport(transport: AgentTransport): void;
 
   setStorageState(patch: Partial<StorageState>): void;
+
+  /** Registers/unregisters the live player instance. Called by VideoStage on mount/unmount. */
+  registerPlayer(handle: PlayerHandle | null): void;
+  play(): Promise<void>;
+  pause(): void;
+  togglePlay(): Promise<void>;
+  /** Sets currentTime and resolves once the player actually reports the seek as complete. */
+  seek(time: number, opts?: { signal?: AbortSignal }): Promise<void>;
+  setPlayerVolume(v: number): void;
+  setPlayerMuted(m: boolean): void;
+  setPlayerRate(r: number): void;
+  /** Steps by `count` frames (may be negative) at the store's current fps while paused. */
+  stepFrames(count: number): Promise<void>;
 }
 
 const ACTIVITY_LIMIT = 200;
@@ -113,6 +145,10 @@ function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: numbe
 export type StudioStore = ReturnType<typeof createStudioStore>;
 
 export function createStudioStore() {
+  // Kept outside zustand state: a mutable library handle is not serializable/comparable state,
+  // and each store instance gets its own closure-scoped handle (important for test isolation).
+  let playerHandle: PlayerHandle | null = null;
+
   return createVanillaStore<StudioState>()((set, get) => ({
     source: null,
     player: {
@@ -261,6 +297,60 @@ export function createStudioStore() {
 
     setStorageState(patch) {
       set((s) => ({ storage: { ...s.storage, ...patch } }));
+    },
+
+    registerPlayer(handle) {
+      playerHandle = handle;
+    },
+    async play() {
+      await playerHandle?.play();
+    },
+    pause() {
+      playerHandle?.pause();
+    },
+    async togglePlay() {
+      if (!playerHandle) return;
+      if (playerHandle.paused) await playerHandle.play();
+      else playerHandle.pause();
+    },
+    async seek(time, opts) {
+      const handle = playerHandle;
+      if (!handle) {
+        set((s) => ({ player: { ...s.player, currentTime: Math.max(0, time) } }));
+        return;
+      }
+      const clamped = Math.max(0, Math.min(time, get().player.duration || time));
+      await new Promise<void>((resolve) => {
+        const onSeeked = (): void => {
+          handle.removeEventListener('seeked', onSeeked);
+          opts?.signal?.removeEventListener('abort', onAbort);
+          resolve();
+        };
+        const onAbort = (): void => {
+          handle.removeEventListener('seeked', onSeeked);
+          resolve();
+        };
+        handle.addEventListener('seeked', onSeeked, { once: true });
+        opts?.signal?.addEventListener('abort', onAbort, { once: true });
+        handle.currentTime = clamped;
+      });
+    },
+    setPlayerVolume(v) {
+      if (playerHandle) playerHandle.volume = v;
+      set((s) => ({ player: { ...s.player, volume: v } }));
+    },
+    setPlayerMuted(m) {
+      if (playerHandle) playerHandle.muted = m;
+      set((s) => ({ player: { ...s.player, muted: m } }));
+    },
+    setPlayerRate(r) {
+      if (playerHandle) playerHandle.playbackRate = r;
+      set((s) => ({ player: { ...s.player, rate: r } }));
+    },
+    async stepFrames(count) {
+      const { currentTime, fps } = get().player;
+      const delta = count / (fps || 30);
+      await get().seek(currentTime + delta);
     },
   }));
 }

@@ -339,8 +339,8 @@ Image results: `capture_frame` always shows the frame in the Frames tray (so bro
 ## Progress Tracking
 
 - [x] Task 1: Design the product in Claude Design (3 directions → selection → 5 deliverable screens + tokens)
-- [ ] Task 2: Scaffold the repo, toolchain, storage layer, store, tests, CI/Pages deploy, first push
-- [ ] Task 3: Player core, sources (sample/URL/YouTube/local→OPFS), library UI, port of vidstack chrome + timeline
+- [x] Task 2: Scaffold the repo, toolchain, storage layer, store, tests, CI/Pages deploy, first push
+- [x] Task 3: Player core, sources (sample/URL/YouTube/local→OPFS), library UI, port of vidstack chrome + timeline
 - [ ] Task 4: Tool registry + WebMCP/bridge/testing transports + Activity feed + session/library/playback tools
 - [ ] Task 5: Frames: capture channels, overlay compositing, thumbnails/filmstrip sprite, YouTube fallbacks, tab capture
 - [ ] Task 6: Notes, chapters, tags, timeline markers, panels, export formats (md/json/vtt/srt/csv/edl)
@@ -793,6 +793,7 @@ Image results: `capture_frame` always shows the frame in the Frames tray (so bro
 ## Deviations
 
 - Task 1 (user-agreed): during the Claude Design direction selection, the user chose option 1a (warm editorial, evolves the earlier Lumen Studio look) as the default light theme and asked to keep option 1b (dark grading suite: charcoal/cyan/mono) as a dark-mode variant rather than discarding it. `src/styles/tokens.css` therefore defines both a light palette (from 1a) on `:root` and a dark palette (from 1b) under `@media (prefers-color-scheme: dark)` / `[data-theme="dark"]`, and Task 3 adds a theme toggle (`ui.theme: 'light'|'dark'|'system'` in the store, persisted, surfaced in `TopBar`) instead of shipping light-only. The five deliverable screens are built in the light theme; `system/tokens.dc.html` documents both palettes and includes one dark-mode reference frame.
+- Task 3 (tactical): Task 3's own Definition of Done requires "YouTube shows oEmbed title and 4 ytimg thumbs in the filmstrip slot", but `src/components/Timeline/Filmstrip.tsx` was file-mapped to Task 5. Created a minimal `Filmstrip.tsx` (renders a row of `<img>` from `ResolvedSource.filmstripUrls`, a new field populated only for the YouTube branch of `resolveSource()`) in Task 3 to satisfy that DoD line now; Task 5 extends/replaces it with a real mediabunny-generated sprite for local/URL sources per its own Files/Key Decisions, rather than duplicating the display component.
 
 ## Deferred Ideas
 

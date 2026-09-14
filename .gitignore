@@ -8,3 +8,4 @@ docs/plans/.annotations/
 *.log
 *.tsbuildinfo
 .DS_Store
+.claude/scheduled_tasks.lock

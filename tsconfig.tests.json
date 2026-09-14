@@ -10,7 +10,7 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "vite/client", "webmcp-types"],
     "noEmit": true
   },
   "include": ["tests/**/*.ts"]

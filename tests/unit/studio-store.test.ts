@@ -33,22 +33,16 @@ describe('createStudioStore', () => {
     expect(s.storage.persisted).toBe(false);
   });
 
-  it('setSource replaces the current asset', () => {
+  it('setSource replaces the current resolved source', () => {
     const store = createStudioStore();
-    const asset = {
-      id: 'a1',
-      projectId: 'p1',
+    const source = {
+      src: 'https://files.vidstack.io/sprite-fight/720p.mp4',
+      title: 'Sprite Fight',
       kind: 'sample' as const,
-      name: 'Sprite Fight',
-      duration: 629,
-      width: 1280,
-      height: 720,
-      fps: 30,
-      bytes: 0,
-      createdAt: 0,
+      canCapture: true,
     };
-    store.getState().setSource(asset);
-    expect(store.getState().source).toEqual(asset);
+    store.getState().setSource(source);
+    expect(store.getState().source).toEqual(source);
     store.getState().setSource(null);
     expect(store.getState().source).toBeNull();
   });
