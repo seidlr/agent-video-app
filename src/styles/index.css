@@ -1,0 +1,41 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@theme {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-2: var(--color-surface-2);
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-ink-3: var(--color-ink-3);
+  --color-ink-4: var(--color-ink-4);
+  --color-line: var(--color-line);
+  --color-line-2: var(--color-line-2);
+  --color-clay: var(--color-clay);
+  --color-clay-soft: var(--color-clay-soft);
+  --color-clay-ink: var(--color-clay-ink);
+  --color-good: var(--color-good);
+  --color-good-soft: var(--color-good-soft);
+  --color-warn: var(--color-warn);
+  --color-chip: var(--color-chip);
+  --color-annotate: var(--color-annotate);
+  --color-annotate-ink: var(--color-annotate-ink);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}

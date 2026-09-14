@@ -1,0 +1,14 @@
+{
+  "samples": [
+    {
+      "id": "sprite-fight",
+      "title": "Sprite Fight",
+      "url": "https://files.vidstack.io/sprite-fight/720p.mp4",
+      "thumbnailsVtt": "https://files.vidstack.io/sprite-fight/thumbnails.vtt",
+      "duration": 629,
+      "width": 1280,
+      "height": 720,
+      "license": "CORS-enabled demo asset, vidstack.io"
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+/**
+ * Agent Video Studio design tokens.
+ * Source: Claude Design project "Agent Video Studio" (c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48),
+ * system/tokens.dc.html — see ../../docs/design/DESIGN.md for the full token map.
+ *
+ * Light = direction 1a (warm editorial). Dark = direction 1b (grading suite), re-themed onto
+ * the same component vocabulary per the user's request (docs/plans/2026-09-14-agent-first-video-player.md#deviations).
+ *
+ * Tailwind 4 generates utilities from every --color-*/--font-*/--radius-* custom property
+ * declared inside @theme (bg-bg, text-ink, font-sans, rounded-token, etc.).
+ */
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-serif: 'Fraunces', Georgia, serif;
+
+  --radius-token: 10px;
+  --radius-token-lg: 14px;
+
+  /* Light palette (direction 1a) — also the default :root values below */
+  --color-bg: #f5f1eb;
+  --color-surface: #faf9f5;
+  --color-surface-2: #efeae0;
+  --color-ink: #1f1e1c;
+  --color-ink-2: #44403b;
+  --color-ink-3: #6e6a62;
+  --color-ink-4: #a8a299;
+  --color-line: #e5dfd2;
+  --color-line-2: #d9d2c2;
+  --color-clay: #c96442;
+  --color-clay-soft: #efd9cc;
+  --color-clay-ink: #6b2c12;
+  --color-good: #4f7b4a;
+  --color-good-soft: #dde6d6;
+  --color-warn: #b7791f;
+  --color-chip: #ece6d8;
+  /* Reserved for agent-drawn annotations (boxes/masks/tracks) — never reused as a UI color */
+  --color-annotate: #4fb3d9;
+  --color-annotate-ink: #06232c;
+}
+
+/*
+ * Tailwind's @theme block only ever holds ONE value per token (it defines the utility, not
+ * a themeable variable), so the actual light/dark swap happens on plain custom properties
+ * that the @theme tokens above reference indirectly via the same names at :root scope.
+ * Component code should read colors through the Tailwind utilities (bg-bg, text-ink, ...);
+ * this block is what makes those utilities repaint under the dark theme.
+ */
+:root {
+  --color-bg: #f5f1eb;
+  --color-surface: #faf9f5;
+  --color-surface-2: #efeae0;
+  --color-ink: #1f1e1c;
+  --color-ink-2: #44403b;
+  --color-ink-3: #6e6a62;
+  --color-ink-4: #a8a299;
+  --color-line: #e5dfd2;
+  --color-line-2: #d9d2c2;
+  --color-clay: #c96442;
+  --color-clay-soft: #efd9cc;
+  --color-clay-ink: #6b2c12;
+  --color-good: #4f7b4a;
+  --color-good-soft: #dde6d6;
+  --color-warn: #b7791f;
+  --color-chip: #ece6d8;
+  --color-annotate: #4fb3d9;
+  --color-annotate-ink: #06232c;
+}
+
+/* System preference, only when the user hasn't made an explicit choice */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #121417;
+    --color-surface: #181b1f;
+    --color-surface-2: #1c1f23;
+    --color-ink: #eef1f4;
+    --color-ink-2: #c7cdd3;
+    --color-ink-3: #8a929c;
+    --color-ink-4: #5b6167;
+    --color-line: #282c31;
+    --color-line-2: #33383e;
+    --color-clay: #37e0c4;
+    --color-clay-soft: #0f2e28;
+    --color-clay-ink: #37e0c4;
+    --color-good: #5fbf6b;
+    --color-good-soft: #16301c;
+    --color-warn: #f2a340;
+    --color-chip: #1c1f23;
+    --color-annotate: #4fb3d9;
+    --color-annotate-ink: #06232c;
+  }
+}
+
+/* Explicit user choice via TopBar's theme toggle (ui.theme in the store) wins in both directions */
+:root[data-theme='dark'] {
+  --color-bg: #121417;
+  --color-surface: #181b1f;
+  --color-surface-2: #1c1f23;
+  --color-ink: #eef1f4;
+  --color-ink-2: #c7cdd3;
+  --color-ink-3: #8a929c;
+  --color-ink-4: #5b6167;
+  --color-line: #282c31;
+  --color-line-2: #33383e;
+  --color-clay: #37e0c4;
+  --color-clay-soft: #0f2e28;
+  --color-clay-ink: #37e0c4;
+  --color-good: #5fbf6b;
+  --color-good-soft: #16301c;
+  --color-warn: #f2a340;
+  --color-chip: #1c1f23;
+  --color-annotate: #4fb3d9;
+  --color-annotate-ink: #06232c;
+}
