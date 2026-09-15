@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { TopBar } from './components/TopBar';
 import { VideoStage } from './components/Stage/VideoStage';
 import { Library } from './components/Panels/Library';
+import { Activity } from './components/Panels/Activity';
 import { useStudio } from './store/studio';
 import type { PanelId } from './store/studio';
 
@@ -26,6 +27,8 @@ function PanelBody({ panel }: { panel: PanelId }): ReactElement {
   switch (panel) {
     case 'library':
       return <Library />;
+    case 'activity':
+      return <Activity />;
     default:
       return <ComingSoonPanel label={TABS.find((t) => t.id === panel)?.label ?? panel} />;
   }

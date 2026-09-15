@@ -15,9 +15,8 @@ import { useStudio } from '../../store/studio';
  * Ported from ../agent-video-player/src/components/VideoStage/VideoStage.tsx:166-206 and
  * Chrome.tsx, adapted to the new store and stripped of Firebase session sync (Task 2's
  * Out of Scope; this app is front-end only). Duration/dimensions are captured via
- * onLoadedMetadata/onDurationChange when they fire in time, with a self-healing catch-up in
- * onTimeUpdate for when they don't (see captureMetadataOnce) -- see that function's comment for
- * why the old project's 500ms setInterval poll (VideoStage.tsx:82-91) couldn't simply be dropped.
+ * playerRef.current.subscribe() (see the effect below for why) instead of the loadedmetadata/
+ * durationchange DOM events.
  */
 export function VideoStage(): ReactElement {
   const playerRef = useRef<MediaPlayerInstance>(null);
@@ -37,6 +36,8 @@ export function VideoStage(): ReactElement {
   const setPlayerRate = useStudio((s) => s.setPlayerRate);
   const setPlayerMuted = useStudio((s) => s.setPlayerMuted);
   const stepFrames = useStudio((s) => s.stepFrames);
+  const loop = useStudio((s) => s.player.loop);
+  const seek = useStudio((s) => s.seek);
 
   const activeChapter = chapters.find((c) => currentTime >= c.start && currentTime <= c.end) ?? null;
   const activeIndex = activeChapter ? Math.max(0, chapters.indexOf(activeChapter)) : 0;
@@ -46,36 +47,34 @@ export function VideoStage(): ReactElement {
     return () => registerPlayer(null);
   }, [registerPlayer, source]);
 
-  const metadataAppliedRef = useRef(false);
-  useEffect(() => {
-    metadataAppliedRef.current = false;
-  }, [source]);
-
   /**
-   * `loadedmetadata`/`duration-change` are one-shot events that can fire before React's
+   * `loadedmetadata`/`durationchange` are one-shot DOM events that can fire before React's
    * vidstack-react event bridge finishes attaching its listeners (confirmed empirically: with
-   * only onLoadedMetadata/onDurationChange wired, duration/width/height stayed 0 even though
-   * the underlying <video> reached readyState 4 with the correct duration). onTimeUpdate fires
-   * repeatedly, so applying the same metadata capture there is a reliable self-healing catch-up
-   * -- this replaces the old project's 500ms setInterval poll (VideoStage.tsx:82-91) without
-   * reintroducing a timer.
+   * only onLoadedMetadata/onDurationChange wired, duration/width/height stayed 0 even though the
+   * underlying <video> reached readyState 4 with the correct duration) -- and if the video is
+   * never played, no later event ever gives metadata capture a second chance either (confirmed
+   * via tests/e2e/tools-playback.spec.ts: an agent calling load_video then get_state without
+   * ever playing saw duration stuck at 0). `player.subscribe()` is vidstack's own reactive
+   * primitive (Maverick.js signals): the callback runs once immediately with whatever the
+   * *current* state already is, then again on every future change, so there is no "did the event
+   * fire before or after we started listening" window to lose at all.
    */
-  function captureMetadataOnce(): void {
-    if (metadataAppliedRef.current) return;
-    const state = playerRef.current?.state;
-    if (!state?.duration) return;
-    metadataAppliedRef.current = true;
-    setDuration(state.duration);
-    setDimensions(state.width || 0, state.height || 0);
-
-    if (source?.kind === 'file' && source.assetId) {
-      void updateAssetMetadata(source.assetId, { duration: state.duration, width: state.width || 0, height: state.height || 0 });
-    }
-  }
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    let applied = false;
+    return player.subscribe((state) => {
+      if (applied || !state.duration) return;
+      applied = true;
+      setDuration(state.duration);
+      setDimensions(state.width || 0, state.height || 0);
+      if (source?.kind === 'file' && source.assetId) {
+        void updateAssetMetadata(source.assetId, { duration: state.duration, width: state.width || 0, height: state.height || 0 });
+      }
+    });
+  }, [source, setDuration, setDimensions]);
 
   function handleLoadedMetadata(): void {
-    captureMetadataOnce();
-
     // Prime the player to clear the poster on browsers that allow a brief silent play.
     playerRef.current
       ?.play()
@@ -87,11 +86,27 @@ export function VideoStage(): ReactElement {
       });
   }
 
-  function syncFromPlayer(): void {
+  /**
+   * Split into per-field syncs rather than one handler that re-reads volume/muted/rate on every
+   * event, no matter which one fired. That blanket version had a real race, caught by
+   * tests/e2e/tools-playback.spec.ts's set_playback step (volume, muted and rate applied back to
+   * back): setting volume dispatches a native `volumechange` asynchronously, and by the time it
+   * arrives here a few ms later, a *subsequent* setPlayerRate call may already have applied a new
+   * rate -- but this handler would still re-read state.playbackRate for its "sync", which
+   * vidstack's own internal signal had not yet caught up to, clobbering the just-set rate back to
+   * its old value. Scoping each handler to only the field its own event reports removes the
+   * cross-contamination entirely.
+   */
+  function syncVolumeFromPlayer(): void {
     const state = playerRef.current?.state;
     if (!state) return;
     setPlayerVolume(state.volume);
     setPlayerMuted(state.muted);
+  }
+
+  function syncRateFromPlayer(): void {
+    const state = playerRef.current?.state;
+    if (!state) return;
     setPlayerRate(state.playbackRate);
   }
 
@@ -132,18 +147,26 @@ export function VideoStage(): ReactElement {
       onKeyDown={handleKeyDown}
       onTimeUpdate={(detail) => {
         setCurrentTime(detail.currentTime);
-        captureMetadataOnce();
+        // set_playback's {loop:{start,end}} (Task 4): a timeupdate guard that seeks back to
+        // `start` once the playhead reaches `end`, per the plan's own stated approach -- vidstack
+        // has no built-in A/B loop concept, so this has to live at the same event that already
+        // drives currentTime.
+        if (loop && detail.currentTime >= loop.end) {
+          void seek(loop.start);
+        }
       }}
       onLoadedMetadata={handleLoadedMetadata}
-      onDurationChange={() => captureMetadataOnce()}
       onPlay={() => {
         setPaused(false);
         setHasPlayed(true);
       }}
       onPause={() => setPaused(true)}
-      onVolumeChange={syncFromPlayer}
-      onRateChange={syncFromPlayer}
-      onEnd={syncFromPlayer}
+      onVolumeChange={syncVolumeFromPlayer}
+      onRateChange={syncRateFromPlayer}
+      onEnd={() => {
+        syncVolumeFromPlayer();
+        syncRateFromPlayer();
+      }}
     >
       <div
         ref={containerRef}

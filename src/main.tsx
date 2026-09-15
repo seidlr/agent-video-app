@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { mountAgent } from './agent';
 import { App } from './App';
 import { DEFAULT_PROJECT_ID } from './lib/types';
 import { loadSource } from './media/load';
@@ -29,3 +30,8 @@ void getLastSource(DEFAULT_PROJECT_ID).then((lastSource) => {
   if (!lastSource) return;
   return loadSource(studioStore.getState(), lastSource).catch(() => undefined);
 });
+
+// Mount the agent surface (WebMCP/bridge transports, session/library/playback tools) after the
+// store exists (Task 4). Independent of the source-restore above -- an agent should be able to
+// call load_video itself even before/without a prior session's video finishing its restore.
+void mountAgent(studioStore);

@@ -78,6 +78,27 @@ describe('studio store player actions', () => {
     expect(resolved).toBe(true);
   });
 
+  it('seek() resolves on its own timeout if the player never fires "seeked" (e.g. vidstack\'s YouTube provider, confirmed live not to always dispatch it)', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = createStudioStore();
+      const handle = createMockPlayer();
+      store.getState().registerPlayer(handle);
+
+      let resolved = false;
+      const seekPromise = store.getState().seek(12.5).then(() => {
+        resolved = true;
+      });
+
+      expect(handle.currentTime).toBe(12.5); // the seek is still requested immediately
+      await vi.advanceTimersByTimeAsync(2000); // well past any reasonable "seeked" latency
+      await seekPromise;
+      expect(resolved).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('seek() without a registered handle updates only the store snapshot', async () => {
     const store = createStudioStore();
     await store.getState().seek(5);

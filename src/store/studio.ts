@@ -131,6 +131,9 @@ export interface StudioState {
 }
 
 const ACTIVITY_LIMIT = 200;
+/** Upper bound on how long seek() waits for a "seeked" event before resolving anyway -- see the
+ * comment at its call site (vidstack's YouTube provider does not reliably dispatch it). */
+const SEEK_FALLBACK_MS = 1500;
 
 let idCounter = 0;
 function nextId(prefix: string): string {
@@ -321,15 +324,22 @@ export function createStudioStore() {
       }
       const clamped = Math.max(0, Math.min(time, get().player.duration || time));
       await new Promise<void>((resolve) => {
-        const onSeeked = (): void => {
+        let settled = false;
+        const finish = (): void => {
+          if (settled) return;
+          settled = true;
           handle.removeEventListener('seeked', onSeeked);
           opts?.signal?.removeEventListener('abort', onAbort);
+          clearTimeout(timeoutId);
           resolve();
         };
-        const onAbort = (): void => {
-          handle.removeEventListener('seeked', onSeeked);
-          resolve();
-        };
+        const onSeeked = (): void => finish();
+        const onAbort = (): void => finish();
+        // vidstack's YouTube provider does not reliably dispatch `seeked` (confirmed live: the
+        // iframe API applies the seek -- currentTime updates -- but no event follows), which
+        // would otherwise hang this promise, and by extension any playback tool built on it,
+        // forever. SEEK_FALLBACK_MS bounds the wait so a call always settles.
+        const timeoutId = setTimeout(finish, SEEK_FALLBACK_MS);
         handle.addEventListener('seeked', onSeeked, { once: true });
         opts?.signal?.addEventListener('abort', onAbort, { once: true });
         handle.currentTime = clamped;
