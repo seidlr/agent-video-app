@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { TimeSlider } from '@vidstack/react';
 import { useStudio } from '../../store/studio';
+import { ClipRanges } from './ClipRanges';
 import { Markers } from './Markers';
 
 /**
@@ -17,6 +18,7 @@ export function Timeline(): ReactElement {
   const notes = useStudio((s) => s.notes);
   const boxes = useStudio((s) => s.boxes);
   const scenes = useStudio((s) => s.scenes);
+  const clips = useStudio((s) => s.clips);
   const source = useStudio((s) => s.source);
   const seek = useStudio((s) => s.seek);
 
@@ -44,6 +46,7 @@ export function Timeline(): ReactElement {
           currentTime snapshot follows via VideoStage's onTimeUpdate, so no extra handler here. */}
       <TimeSlider.Root className="group relative flex w-full cursor-pointer touch-none flex-col pt-3 pb-1.5 outline-none select-none">
         <Markers chapters={chapters} notes={notes} boxes={boxes} scenes={scenes} duration={duration} onSeek={(t) => void seek(t)} />
+        <ClipRanges clips={clips} duration={duration} onSeek={(t) => void seek(t)} />
 
         <div className="relative h-1">
           {chapters.length > 0 ? (
@@ -111,6 +114,12 @@ export function Timeline(): ReactElement {
             <span className="inline-block h-2 w-2 rounded-sm bg-annotate" />
             Boxes · {boxes.length}
           </span>
+          {clips.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm border border-clay bg-clay-soft" />
+              Clips · {clips.length}
+            </span>
+          )}
         </div>
         <div className="inline-flex gap-1">
           <button

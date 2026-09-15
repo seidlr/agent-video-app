@@ -9,6 +9,7 @@ import { Notes } from './components/Panels/Notes';
 import { Tracking } from './components/Panels/Tracking';
 import { Vision } from './components/Panels/Vision';
 import { Transcript } from './components/Panels/Transcript';
+import { Clips } from './components/Panels/Clips';
 import { useStudio } from './store/studio';
 import type { PanelId } from './store/studio';
 
@@ -48,6 +49,8 @@ function PanelBody({ panel }: { panel: PanelId }): ReactElement {
       return <Vision />;
     case 'transcript':
       return <Transcript />;
+    case 'clips':
+      return <Clips />;
     default:
       return <ComingSoonPanel label={TABS.find((t) => t.id === panel)?.label ?? panel} />;
   }

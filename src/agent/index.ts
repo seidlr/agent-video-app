@@ -5,6 +5,7 @@ import { createRegistry, type Registry } from './registry';
 import { defineAudioTools } from './tools/audio';
 import { defineBoxesTools } from './tools/boxes';
 import { defineChaptersTools } from './tools/chapters';
+import { defineClipsTools } from './tools/clips';
 import { defineExportsTools } from './tools/exports';
 import { defineFramesTools } from './tools/frames';
 import { defineLibraryTools } from './tools/library';
@@ -33,6 +34,7 @@ export function createAgentRegistry(store: StudioStore): Registry {
   defineNotesTools(registry, store);
   defineChaptersTools(registry, store);
   defineBoxesTools(registry, store);
+  defineClipsTools(registry, store);
   defineExportsTools(registry, store);
   defineModelTools(registry, store);
   defineVisionTools(registry, store);
