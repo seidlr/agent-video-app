@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "types": ["node"],
+    "types": ["node", "vite/client", "webmcp-types"],
     "noEmit": true
   },
   "include": [
@@ -19,7 +19,8 @@
     "playwright.config.ts",
     "eslint.config.js",
     "scripts/**/*.ts",
-    "server/**/*.ts"
+    "server/**/*.ts",
+    "src/types/**/*.d.ts"
   ],
   "exclude": ["scripts/fixture-gen-client.ts"]
 }

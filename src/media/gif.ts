@@ -1,6 +1,14 @@
-import { applyPalette, GIFEncoder, quantize } from 'gifenc';
+// A namespace import, not named imports: gifenc's CJS build assigns its exports through an
+// esbuild `__export(exports, {...})` helper that Node's static cjs-module-lexer doesn't always
+// detect (confirmed: `import {GIFEncoder} from 'gifenc'` throws "does not provide an export
+// named" under plain Node/tsx, e.g. scripts/build-skill.ts, even though the exact same named
+// import works fine bundled through Vite in the browser). A namespace import reads the whole
+// `module.exports` object directly, sidestepping that detection step in every environment.
+import * as gifenc from 'gifenc';
 import { CanvasSink } from 'mediabunny';
 import type { Input } from 'mediabunny';
+
+const { applyPalette, GIFEncoder, quantize } = gifenc;
 
 export interface ExportGifOptions {
   start: number;
