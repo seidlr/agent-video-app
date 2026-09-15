@@ -1,26 +1,7 @@
-import skillMarkdown from '../../../skills/agent-video-studio/SKILL.md?raw';
+import { findSection, listSectionHeadings, SKILL_BODY } from '../skill';
 import { secsToTimecode } from '../../lib/time';
 import type { PanelId, StudioStore, ThemeSetting, UiState } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
-
-/** Strips SKILL.md's own frontmatter block before returning it to an agent -- the frontmatter is
- * discovery/manifest metadata (name, description, license, ...) for `index.json`, not part of the
- * skill's actual instructional content. */
-const SKILL_BODY = skillMarkdown.replace(/^---\n[\s\S]*?\n---\n/, '');
-
-/** Splits the skill body into `{heading, body}` sections at each level-2 (`## `) Markdown
- * heading, so `get_agent_skill {section}` can return just one instead of the whole ~130-line
- * document. Anything before the first `## ` heading (the title + intro paragraph) has no heading
- * of its own and is grouped under the empty-string key, always included regardless of `section`. */
-function splitIntoSections(markdown: string): { heading: string; body: string }[] {
-  const parts = markdown.split(/^## /m);
-  const sections = [{ heading: '', body: parts[0]!.trimEnd() }];
-  for (const part of parts.slice(1)) {
-    const newlineIndex = part.indexOf('\n');
-    sections.push({ heading: part.slice(0, newlineIndex), body: `## ${part}`.trimEnd() });
-  }
-  return sections;
-}
 
 const VIEW_PANELS: PanelId[] = ['library', 'notes', 'frames', 'tracking', 'vision', 'transcript', 'clips', 'effects', 'models', 'activity', 'skill'];
 
@@ -100,17 +81,12 @@ export function defineSessionTools(registry: Registry, store: StudioStore): void
         return { ok: true, summary: 'Agent Video Studio skill documentation', content: SKILL_BODY };
       }
 
-      const sections = splitIntoSections(SKILL_BODY);
-      const query = args.section.toLowerCase();
-      const match = sections.find((s) => s.heading.toLowerCase().includes(query));
+      const match = findSection(args.section);
       if (!match) {
         return {
           ok: false,
           error: 'unknown_section',
-          hint: `No section matches "${args.section}". Known sections: ${sections
-            .filter((s) => s.heading)
-            .map((s) => s.heading)
-            .join(', ')}`,
+          hint: `No section matches "${args.section}". Known sections: ${listSectionHeadings().join(', ')}`,
         };
       }
       return { ok: true, summary: `Skill documentation: ${match.heading}`, content: match.body };
