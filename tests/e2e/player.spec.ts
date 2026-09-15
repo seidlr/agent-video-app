@@ -188,13 +188,17 @@ test.describe('keyboard shortcuts (Task 3 DoD)', () => {
     const pausedAt = await currentTime(page);
 
     // Comma/period step exactly one frame (1/30s @ fps:30) while paused -- our custom handler.
+    // Both polls use an explicit, generous timeout (CI history shows the default 5s poll window
+    // is occasionally too tight on GitHub Actions' 2-worker runner -- confirmed as an environment
+    // difference, not app behavior: this exact assertion passes reliably in every local run, see
+    // the plan's own Task 8 Deviations entry on this recurring CI-only flake).
     await page.keyboard.press(',');
-    await expect.poll(() => currentTime(page)).toBeLessThan(pausedAt);
+    await expect.poll(() => currentTime(page), { timeout: 10_000 }).toBeLessThan(pausedAt);
     const afterBack = await waitForStableCurrentTime(page);
     expect(pausedAt - afterBack).toBeCloseTo(1 / 30, 2);
 
     await page.keyboard.press('.');
-    await expect.poll(() => currentTime(page)).toBeGreaterThan(afterBack);
+    await expect.poll(() => currentTime(page), { timeout: 10_000 }).toBeGreaterThan(afterBack);
     const afterForwardStep = await waitForStableCurrentTime(page);
     expect(afterForwardStep).toBeCloseTo(pausedAt, 2);
 
