@@ -23,8 +23,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** `image` (posted separately from `result` -- see `bus.ts`'s own `ImagePayload` doc comment) becomes
+ * a real MCP `image` content block alongside the JSON text block, rather than a giant base64
+ * string inflating the text (Key Decisions: "`imageBase64` becomes an MCP `image` content block on
+ * the awaiting response"). */
 function toCallToolResult(result: Record<string, unknown>): CallToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
+  const { image, ...rest } = result as { image?: { base64: string; mimeType: string } };
+  const content: CallToolResult['content'] = [{ type: 'text', text: JSON.stringify(rest) }];
+  if (image) content.push({ type: 'image', data: image.base64, mimeType: image.mimeType });
+  return { content, structuredContent: rest };
 }
 
 export interface CreateServerOptions {
@@ -151,12 +158,19 @@ export function createServer(busSessionId: string, bus: CommandBus, options: Cre
     'post_result',
     {
       title: 'post_result',
-      description: 'App-only: posts a dispatched command\'s result back to the server.',
-      inputSchema: z.object({ instanceId: z.string(), cmdId: z.string(), result: z.record(z.string(), z.unknown()) }),
+      description: 'App-only: posts a dispatched command\'s result back to the server. Pass imageBase64/mimeType alongside result for a tool that produced an image (e.g. capture_frame) -- it becomes a real image content block rather than inflating the JSON result.',
+      inputSchema: z.object({
+        instanceId: z.string(),
+        cmdId: z.string(),
+        result: z.record(z.string(), z.unknown()),
+        imageBase64: z.string().optional(),
+        mimeType: z.string().optional(),
+      }),
       _meta: { ui: { visibility: ['app'] } },
     },
-    async (args: { instanceId: string; cmdId: string; result: Record<string, unknown> }): Promise<CallToolResult> => {
-      bus.postResult(busSessionId, args.instanceId, args.cmdId, args.result);
+    async (args: { instanceId: string; cmdId: string; result: Record<string, unknown>; imageBase64?: string; mimeType?: string }): Promise<CallToolResult> => {
+      const image = args.imageBase64 ? { base64: args.imageBase64, mimeType: args.mimeType ?? 'image/png' } : undefined;
+      bus.postResult(busSessionId, args.instanceId, args.cmdId, args.result, image);
       return toCallToolResult({ ok: true });
     },
   );

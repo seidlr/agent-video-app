@@ -119,4 +119,19 @@ describe('command bus (Task 11)', () => {
     await sleep(FAST_OPTS.resultTtlMs + 20);
     expect(bus.getJob('s1', cmdId)).toMatchObject({ ok: false, error: 'unknown_job' });
   });
+
+  it('an image posted alongside a result is carried on the resolved dispatch value and on a later getJob', async () => {
+    const bus = createCommandBus(FAST_OPTS);
+    bus.registerInstance('s1', 'inst-a');
+    const dispatchPromise = bus.dispatch('s1', { name: 'capture_frame', args: {} });
+    const polled = bus.pollCommands('s1', 'inst-a');
+    const cmdId = (polled as { command: { cmdId: string } }).command.cmdId;
+
+    bus.postResult('s1', 'inst-a', cmdId, { ok: true, summary: 'captured' }, { base64: 'ZmFrZS1wbmc=', mimeType: 'image/png' });
+    const resolved = await dispatchPromise;
+    expect(resolved).toMatchObject({ ok: true, summary: 'captured', image: { base64: 'ZmFrZS1wbmc=', mimeType: 'image/png' } });
+
+    const job = bus.getJob('s1', cmdId);
+    expect(job.result).toMatchObject({ image: { base64: 'ZmFrZS1wbmc=', mimeType: 'image/png' } });
+  });
 });

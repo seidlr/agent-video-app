@@ -80,6 +80,31 @@ test.describe('MCP server (Task 11)', () => {
     await client.close();
   });
 
+  test('an image posted alongside a result becomes a real MCP image content block', async () => {
+    const { bus, client } = await connect();
+    const opened = (await client.callTool({ name: 'open_video_studio', arguments: {} })) as CallToolResult;
+    const { instanceId } = opened.structuredContent as { instanceId: string };
+
+    const callPromise = client.callTool({ name: 'capture_frame', arguments: { time: '1' } });
+    let polled: ReturnType<typeof bus.pollCommands> | undefined;
+    for (let i = 0; i < 50 && !(polled && !polled.retired && polled.command); i++) {
+      polled = bus.pollCommands('test-session', instanceId);
+      if (!(polled && !polled.retired && polled.command)) await new Promise((r) => setTimeout(r, 20));
+    }
+    const command = (polled as { command: { cmdId: string } }).command;
+
+    bus.postResult('test-session', instanceId, command.cmdId, { ok: true, summary: 'captured' }, { base64: 'ZmFrZS1wbmc=', mimeType: 'image/png' });
+    const result = (await callPromise) as CallToolResult;
+
+    const imageBlock = result.content.find((c) => c.type === 'image') as { type: 'image'; data: string; mimeType: string } | undefined;
+    expect(imageBlock).toMatchObject({ data: 'ZmFrZS1wbmc=', mimeType: 'image/png' });
+    // structuredContent keeps the plain result fields, not the raw base64 blob duplicated in JSON.
+    expect(result.structuredContent).toMatchObject({ ok: true, summary: 'captured' });
+    expect(result.structuredContent).not.toHaveProperty('image');
+
+    await client.close();
+  });
+
   test('get_job checks the bus\'s own store before forwarding to the browser', async () => {
     const { client } = await connect();
     // No open_video_studio call in this test -- no instance is registered at all, so the

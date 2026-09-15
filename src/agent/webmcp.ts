@@ -79,16 +79,42 @@ export async function mountWebMcp(registry: Registry, store: StudioStore): Promi
   // makes the polyfill reject the still-in-flight call with "Tool unregistered", even though the
   // handler already computed its result. Confirmed empirically: a single shared controller made
   // every `transcribe` call fail this way the instant it succeeded.
-  let sourceController: AbortController | null = null;
+  //
+  // One AbortController *per registered tool* (not one shared per batch): a source-kind switch
+  // between 'local' (registers ['local','yt']) and 'youtube' (registers only ['yt']) previously
+  // retired the ENTIRE outgoing batch and re-registered the whole incoming one from scratch, even
+  // though every 'yt'-tagged tool is identical in both. Reading @mcp-b/global's own polyfill
+  // source (node_modules/@mcp-b/webmcp-polyfill/dist/index.js) showed both `registerTool()` and
+  // an aborted registration's own cleanup path each do a real `await new Promise(r =>
+  // setTimeout(r, 0))` before dispatching `toolchange` -- a genuine macrotask round-trip per tool,
+  // not a microtask -- so retiring ~40 still-wanted 'yt' tools just to immediately re-register
+  // them paid double the real per-tool cost for zero behavioral difference. This is the structural
+  // fix the tools-playback.spec.ts:101 CI flake's own comment called for after a third timeout
+  // bump (60s->90s) still wasn't reliably enough headroom on a loaded runner even with an
+  // *unchanged* tool count between failures -- confirming the bottleneck scales with churn, not
+  // raw registered-tool count alone.
+  const sourceToolControllers = new Map<string, AbortController>();
   async function refreshSourceTools(): Promise<void> {
-    sourceController?.abort();
-    const controller = new AbortController();
-    sourceController = controller;
     const whens = currentLocalWhens(store.getState().source?.kind);
-    if (whens.length === 0) return;
-    // Non-null modelContext: this closure only ever runs after the early `!modelContext` return
-    // above.
-    await Promise.all(registry.list({ when: whens }).map((tool) => registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: controller.signal })));
+    const desired = new Map(registry.list({ when: whens }).map((tool) => [tool.name, tool]));
+
+    for (const [name, controller] of sourceToolControllers) {
+      if (!desired.has(name)) {
+        controller.abort();
+        sourceToolControllers.delete(name);
+      }
+    }
+
+    const toRegister = [...desired.values()].filter((tool) => !sourceToolControllers.has(tool.name));
+    await Promise.all(
+      toRegister.map(async (tool) => {
+        const controller = new AbortController();
+        sourceToolControllers.set(tool.name, controller);
+        // Non-null modelContext: this closure only ever runs after the early `!modelContext`
+        // return above.
+        await registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: controller.signal });
+      }),
+    );
   }
 
   let transcriptController: AbortController | null = null;

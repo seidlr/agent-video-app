@@ -19,9 +19,18 @@ export interface DispatchArgs {
   requestId?: string;
 }
 
+/** `capture_frame` and similar tools hand back an image; the UI posts it alongside the result
+ * rather than embedded inside it (Key Decisions: `post_result {..., imageBase64?, mimeType?}`) so
+ * `server/index.ts` can build a real MCP `image` content block instead of a base64 string
+ * inflating the JSON text block. */
+export interface ImagePayload {
+  base64: string;
+  mimeType: string;
+}
+
 export type DispatchResult =
   | { ok: true; jobId: string; status: 'running' }
-  | ({ ok: boolean; instanceId: string; asset?: string } & Record<string, unknown>)
+  | ({ ok: boolean; instanceId: string; asset?: string; image?: ImagePayload } & Record<string, unknown>)
   | { ok: false; error: 'ui_not_connected'; hint: string }
   | { ok: false; error: 'instance_asset_changed'; instanceId: string; asset?: string };
 
@@ -53,6 +62,7 @@ interface PendingCommand {
 
 interface StoredResult {
   result: Record<string, unknown>;
+  image?: ImagePayload;
   storedAt: number;
 }
 
@@ -90,8 +100,8 @@ export interface CommandBus {
   pollCommands(sessionId: string, instanceId: string): { retired: true } | { retired?: false; command: { cmdId: string; name: string; args: unknown } | null };
   /** Called when the UI posts a tool's result back. Resolves a still-awaiting `dispatch` call, and
    * always stores the result (so a late post after `dispatch` already returned `status:'running'`
-   * is still retrievable via `getJob`). */
-  postResult(sessionId: string, instanceId: string, cmdId: string, result: Record<string, unknown>): void;
+   * is still retrievable via `getJob`). `image` is separate from `result` (see `ImagePayload`). */
+  postResult(sessionId: string, instanceId: string, cmdId: string, result: Record<string, unknown>, image?: ImagePayload): void;
   /** Sends a command to the active instance and awaits its result up to `dispatchTimeoutMs`. */
   dispatch(sessionId: string, cmd: DispatchArgs): Promise<DispatchResult>;
   getJob(sessionId: string, cmdId: string): JobStatus;
@@ -163,12 +173,12 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
     return { command: { cmdId: next.cmdId, name: next.name, args: next.args } };
   }
 
-  function postResult(sessionId: string, instanceId: string, cmdId: string, result: Record<string, unknown>): void {
+  function postResult(sessionId: string, instanceId: string, cmdId: string, result: Record<string, unknown>, image?: ImagePayload): void {
     const session = getOrCreateSession(sessionId);
     const pending = session.pendingById.get(cmdId);
     const inst = session.instances.get(instanceId);
-    const tagged = { ...result, instanceId, asset: inst?.assetId };
-    session.results.set(cmdId, { result: tagged, storedAt: now() });
+    const tagged = { ...result, instanceId, asset: inst?.assetId, ...(image ? { image } : {}) };
+    session.results.set(cmdId, { result: tagged, image, storedAt: now() });
     if (pending) {
       pending.resolve(tagged);
       session.pendingById.delete(cmdId);
