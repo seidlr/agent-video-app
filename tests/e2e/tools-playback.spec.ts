@@ -107,24 +107,40 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     // and-forget, not awaited by load_video), so its registerTool() calls can still be in flight
     // once load_video resolves -- poll rather than snapshot listToolNames() once. This poll's
     // timeout was bumped repeatedly across Tasks 8-11 (15s -> 30s -> 60s -> 90s -> 150s) chasing a
-    // CI-only failure that no bump ever actually fixed; the real cause (see the plan's own
-    // Deviations entry for this task) was unrelated to registration speed entirely -- a genuine
-    // boot-time race in main.tsx's last-source restore, now fixed at the source
-    // (restoreLastSourceOnBoot in media/load.ts). 30s is real, if generous, headroom for actual
-    // tool-registration latency, not a guess against an unsolved flake.
+    // CI-only failure. A real, separate boot-time race (main.tsx's last-source restore clobbering
+    // a fresher load) was found and fixed (restoreLastSourceOnBoot in media/load.ts), but the exact
+    // same CI symptom recurred immediately after, so that was not the (sole) cause -- temporary
+    // [diag] console.error instrumentation below is gathering real evidence before the next fix
+    // attempt rather than guessing again.
     await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
 
+    const beforeCallSourceKind = await page.evaluate(() => (window as unknown as { __studioStore: { getState(): { source?: { kind?: string } | null } } }).__studioStore.getState().source?.kind ?? null);
+    console.error(`[diag] before load_video(youtube): source.kind=${beforeCallSourceKind} t=${Date.now()}`);
+
+    const start = Date.now();
     const toolchangeCount = await page.evaluate(async (id) => {
       let count = 0;
       document.modelContext!.addEventListener('toolchange', () => {
         count++;
       });
-      await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
-      return count;
+      const resultJson = await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
+      return { count, resultJson };
     }, 'jNQXAC9IVRw');
-    expect(toolchangeCount).toBeGreaterThan(0);
+    console.error(`[diag] load_video(youtube) took ${Date.now() - start}ms, result=${toolchangeCount.resultJson}, toolchangeCount=${toolchangeCount.count}`);
+    expect(toolchangeCount.count).toBeGreaterThan(0);
 
-    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).not.toContain('step_frames');
+    const afterCallSourceKind = await page.evaluate(() => (window as unknown as { __studioStore: { getState(): { source?: { kind?: string } | null } } }).__studioStore.getState().source?.kind ?? null);
+    console.error(`[diag] after load_video(youtube): source.kind=${afterCallSourceKind} t=${Date.now()}`);
+
+    let pollCount = 0;
+    await expect
+      .poll(async () => {
+        pollCount++;
+        const kind = await page.evaluate(() => (window as unknown as { __studioStore: { getState(): { source?: { kind?: string } | null } } }).__studioStore.getState().source?.kind ?? null);
+        if (pollCount % 5 === 1) console.error(`[diag] poll#${pollCount} t=${Date.now()} source.kind=${kind}`);
+        return listToolNames(page);
+      }, { timeout: 30_000 })
+      .not.toContain('step_frames');
     // Every yt-unsafe local tool is gone, but every always tool is untouched.
     const withYoutube = await listToolNames(page);
     expect(withYoutube).toContain('get_state');
