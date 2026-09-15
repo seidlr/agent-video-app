@@ -26,10 +26,25 @@ const EXPECTED_TOOL_NAMES = [
   'list_frames',
   'delete_frame',
   'generate_thumbnails',
+  'add_note',
+  'list_notes',
+  'update_note',
+  'delete_note',
+  'add_chapter',
+  'list_chapters',
+  'update_chapter',
+  'delete_chapter',
+  'import_vtt',
+  'list_boxes',
+  'add_box',
+  'update_box',
+  'delete_box',
+  'clear_boxes',
+  'export_notes',
 ];
 
-describe('createAgentRegistry (Task 4/5 DoD: registry.test.ts)', () => {
-  it('registers exactly the session/library/playback/frames tools defined so far', () => {
+describe('createAgentRegistry (Task 4/5/6 DoD: registry.test.ts)', () => {
+  it('registers exactly the session/library/playback/frames/notes/chapters/boxes/export tools defined so far', () => {
     const registry = createAgentRegistry(createStudioStore());
     expect(registry.list().map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
   });

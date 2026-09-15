@@ -1,52 +1,92 @@
 import type { ReactElement } from 'react';
-import type { Box, Note } from '../../lib/types';
+import type { Box, Chapter, Note } from '../../lib/types';
 
 export interface MarkersProps {
+  chapters: Chapter[];
   notes: Note[];
   boxes: Box[];
   duration: number;
+  onSeek: (time: number) => void;
 }
 
 /**
- * Point dots (notes without an end, and agent-drawn box timestamps) above the chapter track,
- * plus region bands (notes with an end) beneath it. Ported from
- * ../agent-video-player/src/components/Timeline.tsx:25-38,72-84,112-127, unified onto the new
- * Note/Box model (the old project split these across `annotations` and `allFrameBoxes`).
+ * Chapter ticks, note points/regions, and box ticks along the timeline, each clickable to seek
+ * (TS-004 step 1/2: "Two markers on the timeline (point + region)", "Chapter tick on timeline").
+ * Ported from ../agent-video-player/src/components/Timeline.tsx:25-38,72-84,112-127, unified onto
+ * the new Note/Box/Chapter model (the old project split these across `annotations` and
+ * `allFrameBoxes` and had no chapter ticks or click-to-seek at all -- both are new for Task 6).
+ * Notes and boxes get visually distinct dots (`--color-ink-3` vs the reserved `--color-annotate`,
+ * which every other agent-drawn overlay in this app already uses) so the two are tellable apart
+ * at a glance. Each marker row is `z-30`, above Timeline.tsx's `TimeSlider.Thumb` (`z-20`) -- both
+ * are absolutely-positioned siblings inside the same `TimeSlider.Root`, so a marker landing near
+ * the current playhead position (e.g. a note near t=0, matching a freshly-loaded video's Thumb)
+ * would otherwise sit *under* the Thumb and silently eat every click meant for the marker
+ * (confirmed empirically: a real click on a visible, enabled marker button never registered).
  */
-export function Markers({ notes, boxes, duration }: MarkersProps): ReactElement {
+export function Markers({ chapters, notes, boxes, duration, onSeek }: MarkersProps): ReactElement {
   const effectiveDuration = duration > 0 ? duration : 1;
-  const pointMarks = [
-    ...notes.filter((n) => n.end === undefined).map((n) => n.time),
-    ...boxes.map((b) => b.time),
-  ].sort((a, b) => a - b);
+  const pct = (t: number): string => `${(t / effectiveDuration) * 100}%`;
+
+  const pointNotes = notes.filter((n) => n.end === undefined).sort((a, b) => a.time - b.time);
   const regionBands = notes
     .filter((n): n is Note & { end: number } => n.end !== undefined)
     .map((n) => ({ start: n.time, end: n.end, label: n.text }))
     .sort((a, b) => a.start - b.start);
+  const sortedBoxes = [...boxes].sort((a, b) => a.time - b.time);
+  const sortedChapters = [...chapters].sort((a, b) => a.start - b.start);
 
   return (
     <>
-      <div className="relative mb-0.5 h-2 pointer-events-none">
-        {pointMarks.map((t, i) => (
-          <span
-            key={i}
-            className="absolute top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink-3"
-            style={{ left: `${(t / effectiveDuration) * 100}%` }}
-            title={`Marker at ${t.toFixed(2)}s`}
+      {sortedChapters.length > 0 && (
+        <div className="relative z-30 mb-0.5 h-1.5 pointer-events-none">
+          {sortedChapters.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onSeek(c.start)}
+              className="absolute top-0 h-1.5 w-0.5 -translate-x-1/2 rounded-full bg-clay pointer-events-auto"
+              style={{ left: pct(c.start) }}
+              title={`Chapter "${c.title}" at ${c.start.toFixed(2)}s`}
+              aria-label={`Seek to chapter ${c.title}`}
+            />
+          ))}
+        </div>
+      )}
+      <div className="relative z-30 mb-0.5 h-2 pointer-events-none">
+        {pointNotes.map((n) => (
+          <button
+            key={n.id}
+            type="button"
+            onClick={() => onSeek(n.time)}
+            className="absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink-3 pointer-events-auto"
+            style={{ left: pct(n.time) }}
+            title={`Note: ${n.text} (${n.time.toFixed(2)}s)`}
+            aria-label={`Seek to note: ${n.text}`}
+          />
+        ))}
+        {sortedBoxes.map((b) => (
+          <button
+            key={b.id}
+            type="button"
+            onClick={() => onSeek(b.time)}
+            className="absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-annotate pointer-events-auto"
+            style={{ left: pct(b.time) }}
+            title={`Box: ${b.label} (${b.time.toFixed(2)}s)`}
+            aria-label={`Seek to box: ${b.label}`}
           />
         ))}
       </div>
       {regionBands.length > 0 && (
-        <div className="relative mt-1 h-1.5 pointer-events-none">
+        <div className="relative z-30 mt-1 h-1.5 pointer-events-none">
           {regionBands.map((b, i) => (
-            <span
+            <button
               key={`${b.start}-${b.end}-${i}`}
-              className="absolute top-0 h-1.5 rounded-full bg-ink-3/35"
-              style={{
-                left: `${(b.start / effectiveDuration) * 100}%`,
-                width: `${Math.max(0.3, ((b.end - b.start) / effectiveDuration) * 100)}%`,
-              }}
+              type="button"
+              onClick={() => onSeek(b.start)}
+              className="absolute top-0 h-1.5 rounded-full bg-ink-3/35 pointer-events-auto"
+              style={{ left: pct(b.start), width: `${Math.max(0.3, ((b.end - b.start) / effectiveDuration) * 100)}%` }}
               title={`${b.label} (${b.start.toFixed(2)}s -> ${b.end.toFixed(2)}s)`}
+              aria-label={`Seek to note region: ${b.label}`}
             />
           ))}
         </div>

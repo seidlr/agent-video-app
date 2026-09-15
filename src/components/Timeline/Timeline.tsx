@@ -25,8 +25,6 @@ export function Timeline(): ReactElement {
     ...boxes.map((b) => b.time),
   ].sort((a, b) => a - b);
 
-  const tagCount = notes.length + boxes.length;
-
   function jumpToPrev(): void {
     if (!navMarks.length) return;
     const prev = [...navMarks].reverse().find((t) => t < currentTime - 0.1);
@@ -44,7 +42,7 @@ export function Timeline(): ReactElement {
       {/* TimeSlider.Root seeks the underlying media element itself on drag/click; the store's
           currentTime snapshot follows via VideoStage's onTimeUpdate, so no extra handler here. */}
       <TimeSlider.Root className="group relative flex w-full cursor-pointer touch-none flex-col pt-3 pb-1.5 outline-none select-none">
-        <Markers notes={notes} boxes={boxes} duration={duration} />
+        <Markers chapters={chapters} notes={notes} boxes={boxes} duration={duration} onSeek={(t) => void seek(t)} />
 
         <div className="relative h-1">
           {chapters.length > 0 ? (
@@ -100,7 +98,11 @@ export function Timeline(): ReactElement {
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-2 w-2 rounded-sm bg-ink-3" />
-            Tags · {tagCount}
+            Notes · {notes.length}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-sm bg-annotate" />
+            Boxes · {boxes.length}
           </span>
         </div>
         <div className="inline-flex gap-1">

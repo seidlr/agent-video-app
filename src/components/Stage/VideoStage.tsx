@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement } from 'react';
-import { MediaPlayer, MediaProvider, type MediaPlayerInstance, type VideoMimeType } from '@vidstack/react';
+import { MediaPlayer, MediaProvider, Track, type MediaPlayerInstance, type VideoMimeType } from '@vidstack/react';
 import { BoxOverlay } from './BoxOverlay';
 import { Chrome } from './Chrome';
 import { FrameLabel } from './FrameLabel';
@@ -8,6 +8,7 @@ import { FrameTitle } from './FrameTitle';
 import { PlayOverlay } from './PlayOverlay';
 import { Filmstrip } from '../Timeline/Filmstrip';
 import { Timeline } from '../Timeline/Timeline';
+import { chaptersToVttDataUrl } from '../../lib/chapters';
 import { buildFilmstripTileStyles } from '../../media/thumbnails';
 import { updateAssetMetadata } from '../../store/library';
 import { useStudio } from '../../store/studio';
@@ -42,6 +43,14 @@ export function VideoStage(): ReactElement {
 
   const activeChapter = chapters.find((c) => currentTime >= c.start && currentTime <= c.end) ?? null;
   const activeIndex = activeChapter ? Math.max(0, chapters.indexOf(activeChapter)) : 0;
+
+  // Timeline.tsx's TimeSlider.Chapters (the segmented progress bar) reads vidstack's own
+  // "chapters" text track, not React state directly -- this is the one place the object-model
+  // chapters get serialized back to a VTT resource for that <Track> to load. Keyed on the URL
+  // itself (which changes whenever chapters change) so vidstack reloads the track on every edit,
+  // same as the reference project's own `key={vttUrl}` (../agent-video-player/src/components/
+  // VideoStage/VideoStage.tsx:194).
+  const chaptersVttUrl = useMemo(() => chaptersToVttDataUrl(chapters), [chapters]);
 
   // The mediabunny-generated sprite (generate_thumbnails, Task 5) backs the real Filmstrip strip
   // for a local/URL source; YouTube keeps its separate source.filmstripUrls (4 ytimg stills) --
@@ -204,7 +213,9 @@ export function VideoStage(): ReactElement {
         ref={containerRef}
         className="relative aspect-video overflow-hidden rounded-token-lg bg-ink"
       >
-        <MediaProvider />
+        <MediaProvider>
+          <Track key={chaptersVttUrl} src={chaptersVttUrl} kind="chapters" label="Chapters" language="en-US" default />
+        </MediaProvider>
         <FrameLabel chapter={activeChapter} index={activeIndex} />
         <FrameTitle title={activeChapter?.title ?? ''} hidden={!paused && hasPlayed} />
         <BoxOverlay />

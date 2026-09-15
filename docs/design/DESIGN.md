@@ -64,6 +64,15 @@ Every write above returned `verification.verified: true` from the CLI's own rend
 - **Export panel** — format switcher chips (`clay` selected), dark mono preview pane matching a terminal, not the light theme (deliberate contrast so exported text reads as "data").
 - **MCP App card** — same Stage/chrome vocabulary at a smaller scale, framed inside a host chat bubble; a separate compact PiP card at 260px wide with a minimal chrome row.
 
+## Drift checkpoint (Task 6)
+
+`open-claude-design sync review c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48 --direction to-code --pair 'screens/01-studio.dc.html=src/App.tsx' --pair 'screens/04-transcript-notes-export.dc.html=src/components/Panels/Notes.tsx'` (review only, no apply) — **review id `438a8810c0babe077709b6736cd82a4c`**. Compared a live 1440×900 screenshot of `http://localhost:3000` (studio view and the Notes panel) against the two deliverable screens. Differences found:
+
+- **Timeline legend**: the mockup's `01-studio.dc.html` shows a fourth item, `Track: tent (0:08–0:22)`, next to `Chapters · N`/`Notes · M`/`Boxes · K`. Tracks don't exist until Task 7, so `Timeline.tsx`'s legend only has the three counts today — expected to gain the fourth once Task 7 ships tracks, not a defect to fix now.
+- **Export UI shape**: the mockup's `04-transcript-notes-export.dc.html` shows a single-select row of format chips next to one live dark-mono preview pane (pick a format, see its rendered text). The implemented `Notes.tsx` instead lists all six formats as separate rows, each with its own Download and Copy button — this follows Task 6's own written Key Decisions ("the Notes panel 'Export' menu offers all six formats and a 'Copy' button next to 'Download' for each"), which is the later, more specific authority on this screen's shape than the Task 1 mockup. Deliberate, not reconciled back to the mockup's chip+preview layout.
+- **Markdown export timestamp format**: the mockup's preview text uses full `HH:MM:SS.mmm` timestamps (e.g. `[00:01:24.400]`). The actual `exportMarkdown` (and TS-004's own explicit expected text, e.g. `- [00:01.500] Red scene starts #scene`) uses the app-wide compact `MM:SS.mmm` form instead. The implementation follows the authoritative TS-004 test scenario over the earlier mockup text.
+- Everything else checked (TopBar theme toggle, agent-transport pill, tab bar, timeline track/thumb, chapter/note/box tick colors) matches the token map and component inventory above with no drift.
+
 ## Visual rules for implementation
 
 - Contrast: body/label text is full-opacity `ink` on `bg`/`surface` (verified ≥4.5:1 in both palettes); never alpha-muted text for anything under 18px.
