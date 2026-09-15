@@ -78,6 +78,69 @@ describe('createStudioStore', () => {
     expect(store.getState().chapters).toHaveLength(1);
   });
 
+  it('addFrame/removeFrame manage the frames tray and revoke the blob URL on removal', () => {
+    const store = createStudioStore();
+    const id = store.getState().addFrame({ time: 2, kind: 'frame', width: 640, height: 360, blobUrl: 'blob:mock-1' });
+    expect(store.getState().frames).toHaveLength(1);
+    expect(store.getState().frames[0]?.id).toBe(id);
+
+    const revoked: string[] = [];
+    const original = URL.revokeObjectURL;
+    URL.revokeObjectURL = (url: string) => revoked.push(url);
+    try {
+      store.getState().removeFrame(id);
+    } finally {
+      URL.revokeObjectURL = original;
+    }
+    expect(store.getState().frames).toHaveLength(0);
+    expect(revoked).toEqual(['blob:mock-1']);
+  });
+
+  it('setSourceThumbnailsVtt patches thumbnailsVttUrl onto the current source without touching other fields', () => {
+    const store = createStudioStore();
+    store.getState().setSource({ src: 'blob:video', title: 'Clip', kind: 'file', canCapture: true, assetId: 'a1' });
+
+    store.getState().setSourceThumbnailsVtt('blob:generated-vtt');
+
+    expect(store.getState().source).toEqual({
+      src: 'blob:video',
+      title: 'Clip',
+      kind: 'file',
+      canCapture: true,
+      assetId: 'a1',
+      thumbnailsVttUrl: 'blob:generated-vtt',
+    });
+  });
+
+  it('setSourceThumbnailsVtt is a no-op when there is no current source', () => {
+    const store = createStudioStore();
+    store.getState().setSourceThumbnailsVtt('blob:generated-vtt');
+    expect(store.getState().source).toBeNull();
+  });
+
+  it('setSourceThumbnailsSprite patches the sprite url and timestamps onto the current source', () => {
+    const store = createStudioStore();
+    store.getState().setSource({ src: 'blob:video', title: 'Clip', kind: 'file', canCapture: true, assetId: 'a1' });
+
+    store.getState().setSourceThumbnailsSprite('blob:generated-sprite', [1, 3, 5]);
+
+    expect(store.getState().source).toEqual({
+      src: 'blob:video',
+      title: 'Clip',
+      kind: 'file',
+      canCapture: true,
+      assetId: 'a1',
+      thumbnailsSpriteUrl: 'blob:generated-sprite',
+      thumbnailsTimestamps: [1, 3, 5],
+    });
+  });
+
+  it('setSourceThumbnailsSprite is a no-op when there is no current source', () => {
+    const store = createStudioStore();
+    store.getState().setSourceThumbnailsSprite('blob:generated-sprite', [1, 3, 5]);
+    expect(store.getState().source).toBeNull();
+  });
+
   it('pushActivity keeps at most 200 entries, dropping the oldest', () => {
     const store = createStudioStore();
     for (let i = 0; i < 205; i++) {

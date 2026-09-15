@@ -3,6 +3,7 @@ import { TopBar } from './components/TopBar';
 import { VideoStage } from './components/Stage/VideoStage';
 import { Library } from './components/Panels/Library';
 import { Activity } from './components/Panels/Activity';
+import { Frames } from './components/Panels/Frames';
 import { useStudio } from './store/studio';
 import type { PanelId } from './store/studio';
 
@@ -10,6 +11,7 @@ const TABS: { id: PanelId; label: string }[] = [
   { id: 'library', label: 'Library' },
   { id: 'activity', label: 'Activity' },
   { id: 'notes', label: 'Notes' },
+  { id: 'frames', label: 'Frames' },
   { id: 'tracking', label: 'Tracking' },
   { id: 'vision', label: 'Vision' },
   { id: 'transcript', label: 'Transcript' },
@@ -29,6 +31,8 @@ function PanelBody({ panel }: { panel: PanelId }): ReactElement {
       return <Library />;
     case 'activity':
       return <Activity />;
+    case 'frames':
+      return <Frames />;
     default:
       return <ComingSoonPanel label={TABS.find((t) => t.id === panel)?.label ?? panel} />;
   }

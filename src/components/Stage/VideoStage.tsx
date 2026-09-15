@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement } from 'react';
 import { MediaPlayer, MediaProvider, type MediaPlayerInstance, type VideoMimeType } from '@vidstack/react';
 import { BoxOverlay } from './BoxOverlay';
@@ -8,6 +8,7 @@ import { FrameTitle } from './FrameTitle';
 import { PlayOverlay } from './PlayOverlay';
 import { Filmstrip } from '../Timeline/Filmstrip';
 import { Timeline } from '../Timeline/Timeline';
+import { buildFilmstripTileStyles } from '../../media/thumbnails';
 import { updateAssetMetadata } from '../../store/library';
 import { useStudio } from '../../store/studio';
 
@@ -41,6 +42,16 @@ export function VideoStage(): ReactElement {
 
   const activeChapter = chapters.find((c) => currentTime >= c.start && currentTime <= c.end) ?? null;
   const activeIndex = activeChapter ? Math.max(0, chapters.indexOf(activeChapter)) : 0;
+
+  // The mediabunny-generated sprite (generate_thumbnails, Task 5) backs the real Filmstrip strip
+  // for a local/URL source; YouTube keeps its separate source.filmstripUrls (4 ytimg stills) --
+  // the two are mutually exclusive per source.
+  const spriteUrl = source?.thumbnailsSpriteUrl;
+  const spriteTimestamps = source?.thumbnailsTimestamps;
+  const filmstripTiles = useMemo(
+    () => (spriteTimestamps ? buildFilmstripTileStyles(spriteTimestamps) : []),
+    [spriteTimestamps],
+  );
 
   useEffect(() => {
     registerPlayer(playerRef.current);
@@ -201,6 +212,7 @@ export function VideoStage(): ReactElement {
         <Chrome playerRef={playerRef} containerRef={containerRef} />
       </div>
       {source.filmstripUrls && <Filmstrip urls={source.filmstripUrls} />}
+      {spriteUrl && <Filmstrip sprite={{ url: spriteUrl, tiles: filmstripTiles }} />}
       {/* Timeline uses vidstack's TimeSlider, which needs to be inside MediaPlayer's context
           tree to read player state -- it must stay a MediaPlayer child, not a page-level sibling
           (ported layout from ../agent-video-player/VideoStage.tsx:202-204). */}

@@ -1,8 +1,15 @@
 import { createStore as createVanillaStore } from 'zustand/vanilla';
 import { useStore } from 'zustand/react';
 import { detectCapabilities, type Capabilities } from '../lib/capabilities';
-import type { Box, Chapter, Clip, Note, ToolCall, Track, TranscriptSegment } from '../lib/types';
+import type { Box, CapturedFrame, Chapter, Clip, Note, ToolCall, Track, TranscriptSegment } from '../lib/types';
 import type { ResolvedSource } from '../media/source';
+
+/** A captured frame plus its in-session display URL (an object URL over the same bytes stored in
+ * Dexie's `frames` table -- see src/agent/tools/frames.ts). Not persisted itself; re-created from
+ * the stored blob each time the app boots, since object URLs don't survive a reload. */
+export interface FrameEntry extends CapturedFrame {
+  blobUrl: string;
+}
 
 export interface PlayerState {
   currentTime: number;
@@ -73,7 +80,7 @@ export interface PlayerHandle {
 export interface StudioState {
   source: ResolvedSource | null;
   player: PlayerState;
-  frames: { id: string; time: number; kind: string }[];
+  frames: FrameEntry[];
   boxes: Box[];
   tracks: Track[];
   notes: Note[];
@@ -86,6 +93,17 @@ export interface StudioState {
   storage: StorageState;
 
   setSource(source: ResolvedSource | null): void;
+  /** Patches the current source's `thumbnailsVttUrl` in place, so a locally-generated sprite
+   * (generate_thumbnails, Task 5) feeds the Timeline hover exactly like a sample's pre-supplied
+   * VTT does (Task 3) -- Timeline.tsx reads only `source?.thumbnailsVttUrl`, unaware of which. */
+  setSourceThumbnailsVtt(url: string): void;
+  /** Patches the current source's `thumbnailsSpriteUrl`/`thumbnailsTimestamps` in place (Task 5's
+   * `generate_thumbnails`), so VideoStage can render the real Filmstrip strip for a local/URL
+   * source from the same sprite the Timeline hover preview already uses. */
+  setSourceThumbnailsSprite(url: string, timestamps: number[]): void;
+
+  addFrame(input: Omit<FrameEntry, 'id'>): string;
+  removeFrame(id: string): void;
 
   setCurrentTime(t: number): void;
   setDuration(d: number): void;
@@ -187,6 +205,25 @@ export function createStudioStore() {
 
     setSource(asset) {
       set({ source: asset });
+    },
+    setSourceThumbnailsVtt(url) {
+      set((s) => (s.source ? { source: { ...s.source, thumbnailsVttUrl: url } } : s));
+    },
+    setSourceThumbnailsSprite(url, timestamps) {
+      set((s) => (s.source ? { source: { ...s.source, thumbnailsSpriteUrl: url, thumbnailsTimestamps: timestamps } } : s));
+    },
+
+    addFrame(input) {
+      const id = nextId('frame');
+      set((s) => ({ frames: [...s.frames, { ...input, id }] }));
+      return id;
+    },
+    removeFrame(id) {
+      set((s) => {
+        const removed = s.frames.find((f) => f.id === id);
+        if (removed) URL.revokeObjectURL(removed.blobUrl);
+        return { frames: s.frames.filter((f) => f.id !== id) };
+      });
     },
 
     setCurrentTime(t) {

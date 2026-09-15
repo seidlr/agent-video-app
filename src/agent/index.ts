@@ -2,21 +2,24 @@ import type { StudioStore } from '../store/studio';
 import { createActivityDeps } from './activity';
 import { mountBridge } from './bridge';
 import { createRegistry, type Registry } from './registry';
+import { defineFramesTools } from './tools/frames';
 import { defineLibraryTools } from './tools/library';
 import { definePlaybackTools } from './tools/playback';
 import { defineSessionTools } from './tools/session';
 import { mountWebMcp } from './webmcp';
 
 /**
- * Builds the registry and defines every tool Task 4 owns (session/library/playback; later tasks
- * add their own groups by calling their own `defineXTools(registry, store)` the same way). Split
- * from `mountAgent` so tests can build a registry without touching `window`/`document`.
+ * Builds the registry and defines every tool this app owns so far (session/library/playback from
+ * Task 4, frames from Task 5; later tasks add their own groups by calling their own
+ * `defineXTools(registry, store)` the same way). Split from `mountAgent` so tests can build a
+ * registry without touching `window`/`document`.
  */
 export function createAgentRegistry(store: StudioStore): Registry {
   const registry = createRegistry(createActivityDeps(store));
   defineSessionTools(registry, store);
   defineLibraryTools(registry, store);
   definePlaybackTools(registry, store);
+  defineFramesTools(registry, store);
   return registry;
 }
 

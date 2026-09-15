@@ -4,6 +4,7 @@ import type { MediaPlayerInstance } from '@vidstack/react';
 import { Captions, Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { secsToTimecode } from '../../lib/time';
 import { useStudio } from '../../store/studio';
+import { TabCaptureButton } from './TabCaptureButton';
 
 export interface ChromeProps {
   playerRef: RefObject<MediaPlayerInstance | null>;
@@ -22,6 +23,7 @@ export function Chrome({ playerRef, containerRef }: ChromeProps): ReactElement {
   const duration = useStudio((s) => s.player.duration);
   const muted = useStudio((s) => s.player.muted);
   const rate = useStudio((s) => s.player.rate);
+  const isYoutube = useStudio((s) => s.source?.kind === 'youtube');
   const togglePlay = useStudio((s) => s.togglePlay);
   const setPlayerRate = useStudio((s) => s.setPlayerRate);
   const setPlayerMuted = useStudio((s) => s.setPlayerMuted);
@@ -153,6 +155,7 @@ export function Chrome({ playerRef, containerRef }: ChromeProps): ReactElement {
         >
           <Maximize2 size={16} />
         </button>
+        {isYoutube && <TabCaptureButton />}
       </div>
     </div>
   );

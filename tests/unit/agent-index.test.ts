@@ -22,10 +22,14 @@ const EXPECTED_TOOL_NAMES = [
   'seek',
   'step_frames',
   'set_playback',
+  'capture_frame',
+  'list_frames',
+  'delete_frame',
+  'generate_thumbnails',
 ];
 
-describe('createAgentRegistry (Task 4 DoD: registry.test.ts)', () => {
-  it('registers exactly the session/library/playback tools Task 4 owns', () => {
+describe('createAgentRegistry (Task 4/5 DoD: registry.test.ts)', () => {
+  it('registers exactly the session/library/playback/frames tools defined so far', () => {
     const registry = createAgentRegistry(createStudioStore());
     expect(registry.list().map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
   });

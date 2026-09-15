@@ -28,6 +28,12 @@ export interface ResolvedSource {
    * pixels are unreachable across the cross-origin iframe). Task 5 generates a real filmstrip
    * for local/URL sources via mediabunny instead of populating this field. */
   filmstripUrls?: string[];
+  /** The mediabunny-generated sprite (Task 5's `generate_thumbnails`) backing the real Filmstrip
+   * strip for a local/URL source: a blob URL for the composited sprite image, plus the exact
+   * timestamps tiled into it (`buildFilmstripTileStyles` turns these into per-tile CSS). Mutually
+   * exclusive with `filmstripUrls`, which only YouTube populates. */
+  thumbnailsSpriteUrl?: string;
+  thumbnailsTimestamps?: number[];
   canCapture: boolean;
   /** Set only for kind:'file' -- the Dexie asset id, so metadata can be written back once the
    * player reports real duration/dimensions (see src/store/library.ts updateAssetMetadata). */
