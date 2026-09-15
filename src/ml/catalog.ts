@@ -14,7 +14,10 @@ export type ModelDevice = 'webgpu' | 'wasm';
 export interface ModelCatalogEntry {
   id: string;
   /** transformers.js pipeline task name -- what `ModelRegistry.get_pipeline_files`/
-   * `is_pipeline_cached` key off. */
+   * `is_pipeline_cached` key off when `usesPipeline` isn't `false`. For a model loaded via a raw
+   * `AutoModelForX`/`AutoProcessor` pair instead of `pipeline()` (pyannote has no corresponding
+   * pipeline task), this is a cosmetic label only -- `ml/client.ts` routes size/cache checks
+   * through the generic, task-agnostic `ModelRegistry.get_files`/`is_cached` instead. */
   task: string;
   /** Hugging Face repo id, e.g. "onnx-community/EdgeTAM-ONNX". */
   repo: string;
@@ -29,6 +32,9 @@ export interface ModelCatalogEntry {
    * downloads (verified against the live Hugging Face file listing, not the repo's total size
    * across every quantization variant). */
   approxMB: number;
+  /** `false` for a model loaded via raw `AutoModelForX.from_pretrained` + `AutoProcessor` rather
+   * than `pipeline(task, ...)` -- see `task`'s own doc comment. Defaults to `true`. */
+  usesPipeline?: boolean;
 }
 
 export const MODEL_CATALOG: ModelCatalogEntry[] = [
@@ -121,6 +127,36 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     // Verified against the live HF tree API: onnx/model_q4f16.onnx (151,069,879 B), matching the
     // plan's own "~151 MB" figure exactly.
     approxMB: 151,
+  },
+  {
+    id: 'pyannote-segmentation',
+    // No corresponding pipeline() task -- loaded via AutoModelForAudioFrameClassification +
+    // AutoProcessor directly (see modeling_pyannote.d.ts's own documented usage). This string is
+    // therefore cosmetic only (list_models/Models panel display); see `usesPipeline` below.
+    task: 'audio-frame-classification',
+    repo: 'onnx-community/pyannote-segmentation-3.0',
+    dtype: 'q8',
+    family: 'audio',
+    device: 'wasm', // a ~1.5MB CPU-friendly quantization; no meaningful WebGPU benefit at this size
+    license: 'MIT',
+    url: 'https://huggingface.co/onnx-community/pyannote-segmentation-3.0',
+    // Verified against the live HF tree API: onnx/model_quantized.onnx (1,542,308 B), matching
+    // the plan's own "quantized 1.5 MB" figure.
+    approxMB: 2,
+    usesPipeline: false,
+  },
+  {
+    id: 'ast-audio-events',
+    task: 'audio-classification',
+    repo: 'onnx-community/ast-finetuned-audioset-10-10-0.4593-ONNX',
+    dtype: 'q4f16',
+    family: 'audio',
+    device: 'webgpu',
+    license: 'BSD-3-Clause', // upstream MIT/ast-finetuned-audioset-10-10-0.4593 is BSD-3-Clause
+    url: 'https://huggingface.co/onnx-community/ast-finetuned-audioset-10-10-0.4593-ONNX',
+    // Verified against the live HF tree API: onnx/model_q4f16.onnx (51,388,564 B), matching the
+    // plan's own "51 MB" figure.
+    approxMB: 51,
   },
 ];
 

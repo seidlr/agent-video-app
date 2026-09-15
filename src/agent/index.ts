@@ -2,6 +2,7 @@ import type { StudioStore } from '../store/studio';
 import { createActivityDeps } from './activity';
 import { mountBridge } from './bridge';
 import { createRegistry, type Registry } from './registry';
+import { defineAudioTools } from './tools/audio';
 import { defineBoxesTools } from './tools/boxes';
 import { defineChaptersTools } from './tools/chapters';
 import { defineExportsTools } from './tools/exports';
@@ -36,6 +37,7 @@ export function createAgentRegistry(store: StudioStore): Registry {
   defineModelTools(registry, store);
   defineVisionTools(registry, store);
   defineTranscriptTools(registry, store);
+  defineAudioTools(registry, store);
   return registry;
 }
 

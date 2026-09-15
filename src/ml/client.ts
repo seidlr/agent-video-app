@@ -254,6 +254,8 @@ function spawnWorkerForFamily(family: ModelCatalogEntry['family']): Worker {
       return new Worker(new URL('./transcribe.worker.ts', import.meta.url), { type: 'module' });
     case 'detect':
       return new Worker(new URL('./detect.worker.ts', import.meta.url), { type: 'module' });
+    case 'audio':
+      return new Worker(new URL('./audio-events.worker.ts', import.meta.url), { type: 'module' });
     default:
       throw new Error(`no_worker_for_family: ${family} (its worker file doesn't exist yet)`);
   }
@@ -285,11 +287,17 @@ function createWorkerForEntry(entry: ModelCatalogEntry, onProgress: (fraction: n
 function createDefaultDeps(): ClientDeps {
   return {
     async isPipelineCached(entry) {
+      if (entry.usesPipeline === false) {
+        return ModelRegistry.is_cached(entry.repo, { dtype: entry.dtype, device: entry.device });
+      }
       return ModelRegistry.is_pipeline_cached(entry.task, entry.repo, { dtype: entry.dtype, device: entry.device });
     },
     async getPipelineSizeMB(entry) {
       try {
-        const files = await ModelRegistry.get_pipeline_files(entry.task, entry.repo, { dtype: entry.dtype, device: entry.device });
+        const files =
+          entry.usesPipeline === false
+            ? await ModelRegistry.get_files(entry.repo, { dtype: entry.dtype, device: entry.device })
+            : await ModelRegistry.get_pipeline_files(entry.task, entry.repo, { dtype: entry.dtype, device: entry.device });
         const metas = await Promise.all(files.map((file) => ModelRegistry.get_file_metadata(entry.repo, file)));
         const totalBytes = metas.reduce((sum, meta) => sum + (meta.size ?? 0), 0);
         return totalBytes > 0 ? totalBytes / 1e6 : entry.approxMB;

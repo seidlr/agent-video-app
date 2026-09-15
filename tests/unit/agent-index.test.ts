@@ -52,6 +52,8 @@ const EXPECTED_TOOL_NAMES = [
   'transcribe',
   'get_transcript',
   'search_transcript',
+  'find_speaker_turns',
+  'tag_audio_events',
 ];
 
 describe('createAgentRegistry (Task 4/5/6/7/8 DoD: registry.test.ts)', () => {
