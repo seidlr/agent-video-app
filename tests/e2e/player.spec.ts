@@ -44,6 +44,27 @@ async function isMuted(page: Page): Promise<boolean> {
   return page.evaluate(() => (window as unknown as { __studioStore: { getState(): { player: { muted: boolean } } } }).__studioStore.getState().player.muted);
 }
 
+/**
+ * The store's currentTime only updates via the native `timeupdate` event (see VideoStage.tsx),
+ * not synchronously with seek() itself, so "the value changed" is not the same thing as "the seek
+ * has settled at its final target" -- a real, network-streamed video (this suite always uses one)
+ * can report transient intermediate positions while a seek is still resolving, especially under a
+ * slower/more loaded CI runner (confirmed: a single "did it change yet" check read a value roughly
+ * 1/7th to 3/5ths of one frame-step away from the true target on GitHub Actions, never locally).
+ * Waits for two consecutive reads, spaced out, to agree before treating the value as final.
+ */
+async function waitForStableCurrentTime(page: Page, timeoutMs = 5000): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  let last = await currentTime(page);
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const next = await currentTime(page);
+    if (Math.abs(next - last) < 1e-4) return next;
+    last = next;
+  }
+  return last;
+}
+
 /** The right-rail panel defaults to Activity (Task 4's placeholder); the sample list and drop
  * zone only render once the Library tab is selected. */
 async function openLibraryTab(page: Page): Promise<void> {
@@ -169,11 +190,13 @@ test.describe('keyboard shortcuts (Task 3 DoD)', () => {
     // Comma/period step exactly one frame (1/30s @ fps:30) while paused -- our custom handler.
     await page.keyboard.press(',');
     await expect.poll(() => currentTime(page)).toBeLessThan(pausedAt);
-    const afterBack = await currentTime(page);
+    const afterBack = await waitForStableCurrentTime(page);
     expect(pausedAt - afterBack).toBeCloseTo(1 / 30, 2);
 
     await page.keyboard.press('.');
-    await expect.poll(() => currentTime(page)).toBeCloseTo(pausedAt, 2);
+    await expect.poll(() => currentTime(page)).toBeGreaterThan(afterBack);
+    const afterForwardStep = await waitForStableCurrentTime(page);
+    expect(afterForwardStep).toBeCloseTo(pausedAt, 2);
 
     // Arrow keys seek +/-5s (vidstack built-in).
     const beforeSeek = await currentTime(page);

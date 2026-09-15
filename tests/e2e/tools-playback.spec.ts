@@ -1,11 +1,24 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
-/** Drives the app exclusively through the WebMCP testing shim (`navigator.modelContextTesting`,
+/**
+ * Drives the app exclusively through the WebMCP testing shim (`navigator.modelContextTesting`,
  * installed by `@mcp-b/global`'s polyfill) -- the same surface a real WebMCP-testing host uses,
  * and the plan's own required path for TS-001 ("proven by a Playwright script that drives
- * exclusively through navigator.modelContextTesting"). executeTool takes/returns JSON strings. */
+ * exclusively through navigator.modelContextTesting"). executeTool takes/returns JSON strings.
+ *
+ * Waits for `name` itself to actually appear in listTools() first: the shim object existing only
+ * means @mcp-b/global's polyfill installed it, not that mountWebMcp()'s own registerTool() calls
+ * (each async, run one at a time in registration order) have gotten around to this specific tool
+ * yet. That gap is narrow enough to never lose locally but wide enough to fail reliably on a
+ * slower CI runner (confirmed: CI failed calling `list_library` -- not the first tool
+ * mountWebMcp() registers -- with "Tool not found" even after an earlier fix here that only
+ * waited for a different, earlier-registered tool). Waiting for the exact tool about to be called
+ * is the same discipline a real external agent should use before calling any tool, and covers
+ * every call site automatically rather than requiring a hand-picked "readiness" tool per test.
+ */
 async function execTool(page: Page, name: string, args: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  await page.waitForFunction((toolName) => navigator.modelContextTesting?.listTools().some((t) => t.name === toolName) ?? false, name);
   const resultJson = await page.evaluate(
     async ({ name, argsJson }) => navigator.modelContextTesting!.executeTool(name, argsJson),
     { name, argsJson: JSON.stringify(args) },
@@ -15,19 +28,6 @@ async function execTool(page: Page, name: string, args: Record<string, unknown> 
 
 async function listToolNames(page: Page): Promise<string[]> {
   return page.evaluate(() => navigator.modelContextTesting!.listTools().map((t) => t.name).sort());
-}
-
-/**
- * `typeof navigator.modelContextTesting !== 'undefined'` only proves the polyfill's testing shim
- * object exists -- it says nothing about whether mountWebMcp()'s own registerTool() calls (each
- * one itself async) have actually finished populating it yet. That gap is narrow enough to never
- * lose locally but wide enough to reproduce reliably on a slower CI runner (confirmed: CI failed
- * with "Tool not found: list_library" using the naive check). Waiting for a specific `always`
- * tool -- registered before any `local`/`yt` tool, so this alone doesn't imply readiness for
- * those -- is the same discipline a real external agent should use before calling any tool.
- */
-async function waitForToolsReady(page: Page): Promise<void> {
-  await page.waitForFunction(() => navigator.modelContextTesting?.listTools().some((t) => t.name === 'get_state') ?? false);
 }
 
 test.describe('agent tools (Task 4 DoD, TS-001)', () => {
@@ -40,7 +40,6 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     // Step 1: empty state, no console errors.
     await page.goto('/');
     await expect(page.locator('header b')).toHaveText('no video loaded');
-    await waitForToolsReady(page);
 
     // Step 2: list_library sees the sample catalog and no stored videos yet.
     const listed = await execTool(page, 'list_library');
@@ -101,7 +100,6 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
 
   test('loading a YouTube source narrows the tool set to its yt-safe subset; loading a file restores it, and ontoolchange fires both times', async ({ page }) => {
     await page.goto('/');
-    await waitForToolsReady(page);
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
     // refreshLocalTools() runs off the store's own subscribe callback (fire-and-forget, not
