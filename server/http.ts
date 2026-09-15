@@ -4,7 +4,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import cors from 'cors';
 import type { Request, Response } from 'express';
 import { createCommandBus } from './bus.js';
-import { createBusRouter } from './bus-http.js';
+import { BUS_JSON_BODY_LIMIT, createBusRouter } from './bus-http.js';
 import { createServer } from './index.js';
 
 const GITHUB_PAGES_ORIGIN = 'https://seidlr.github.io';
@@ -39,7 +39,7 @@ export async function startHttpServer(port = 3001): Promise<{ close(): Promise<v
   // own doc comment) -- this server dispatches arbitrary tool calls to a real browser instance, so
   // a hostile page exploiting DNS rebinding against an unprotected 0.0.0.0 bind is a real risk,
   // not a hypothetical one.
-  const app = createMcpExpressApp({ host: 'localhost' });
+  const app = createMcpExpressApp({ host: 'localhost', jsonLimit: BUS_JSON_BODY_LIMIT });
   app.use(cors({ origin: [DEV_ORIGIN, GITHUB_PAGES_ORIGIN] }));
   app.use(createBusRouter(bus, STDIO_SESSION_ID));
 

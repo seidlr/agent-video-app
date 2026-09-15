@@ -1,6 +1,8 @@
 import type { StudioStore } from '../store/studio';
 import { createActivityDeps } from './activity';
 import { mountBridge } from './bridge';
+import { getBusUrl, mountBusClient } from './busClient';
+import { isMcpAppContext, mountMcpApp } from './mcpApp';
 import { createRegistry, type Registry } from './registry';
 import { defineAudioTools } from './tools/audio';
 import { defineBoxesTools } from './tools/boxes';
@@ -44,14 +46,38 @@ export function createAgentRegistry(store: StudioStore): Registry {
 }
 
 /**
- * Wires the full agent surface onto the page: builds the registry, mounts the WebMCP transport
- * (native or the `@mcp-b/global` polyfill/bridge, which also installs `navigator.modelContextTesting`),
- * mounts `window.agentVideo` for scripting-driven agents, and records the detected transport back
- * into the store so the TopBar pill and `get_state` report it. Called once from main.tsx after
- * the store exists.
+ * Wires the full agent surface onto the page: builds the registry, then mounts exactly one of
+ * three mutually exclusive connection modes (Task 11 Key Decisions) --
+ *
+ * 1. **MCP App** (`isMcpAppContext()`: a sandboxed iframe, or `?mcp=1`): rendered by an MCP host
+ *    (Claude Desktop, ChatGPT Desktop, VS Code); connects via `App`/`postMessage`, no DOM-level
+ *    WebMCP registration applies inside a sandboxed iframe.
+ * 2. **HTTP bus** (`?bus=<origin>`): a UI-less MCP client like Codex CLI drives this same page over
+ *    plain HTTP polling instead.
+ * 3. **Default**: a normal browser tab -- mounts the WebMCP transport (native or the
+ *    `@mcp-b/global` polyfill, which also installs `navigator.modelContextTesting`) and
+ *    `window.agentVideo` for scripting-driven agents (Claude in Chrome).
+ *
+ * Records the resulting transport back into the store so the TopBar pill and `get_state` report
+ * it. Called once from main.tsx after the store exists.
  */
 export async function mountAgent(store: StudioStore): Promise<Registry> {
   const registry = createAgentRegistry(store);
+
+  if (isMcpAppContext()) {
+    const transport = await mountMcpApp(registry, store);
+    store.getState().setAgentTransport(transport);
+    return registry;
+  }
+
+  const busUrl = getBusUrl();
+  if (busUrl) {
+    mountBridge(registry);
+    const transport = await mountBusClient(registry, store, busUrl);
+    store.getState().setAgentTransport(transport);
+    return registry;
+  }
+
   mountBridge(registry);
   const transport = await mountWebMcp(registry, store);
   store.getState().setAgentTransport(transport);

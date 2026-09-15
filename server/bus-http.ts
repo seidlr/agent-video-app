@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import { longPollCommands, type CommandBus } from './bus.js';
 
+/** `/bus/result`'s own body can carry a base64-encoded image (`capture_frame`'s frame) -- Express's
+ * default JSON body limit (100kb, confirmed via `createMcpExpressApp`'s own doc comment) rejects a
+ * real captured frame outright ("PayloadTooLargeError: request entity too large", confirmed live
+ * against a real browser tab posting a real frame). Both `server/http.ts` and `server/stdio.ts`
+ * pass this to their own `createMcpExpressApp({ limit })` call. */
+export const BUS_JSON_BODY_LIMIT = '10mb';
+
 /**
  * The plain REST half of the command bus (Task 11), for a UI-less MCP client like Codex CLI: its
  * own MCP connection (stdio) has no way to render an iframe, so a normal browser tab of the site

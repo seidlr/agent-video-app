@@ -2,7 +2,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { createMcpExpressApp } from '@modelcontextprotocol/express';
 import cors from 'cors';
 import { createCommandBus } from './bus.js';
-import { createBusRouter } from './bus-http.js';
+import { BUS_JSON_BODY_LIMIT, createBusRouter } from './bus-http.js';
 import { createServer } from './index.js';
 
 const GITHUB_PAGES_ORIGIN = 'https://seidlr.github.io';
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const busPort = parseInt(process.env.BUS_PORT ?? '3333', 10);
   // 'localhost', not '0.0.0.0' -- see server/http.ts's own comment on why (DNS rebinding
   // protection, enabled automatically for 'localhost'/'127.0.0.1' but not '0.0.0.0').
-  const busApp = createMcpExpressApp({ host: 'localhost' });
+  const busApp = createMcpExpressApp({ host: 'localhost', jsonLimit: BUS_JSON_BODY_LIMIT });
   busApp.use(cors({ origin: [DEV_ORIGIN, GITHUB_PAGES_ORIGIN] }));
   busApp.use(createBusRouter(bus, STDIO_SESSION_ID));
   busApp.listen(busPort, () => {
