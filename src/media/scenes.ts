@@ -1,4 +1,4 @@
-import { CanvasSink, EncodedPacketSink } from 'mediabunny';
+import { CanvasSink, EncodedPacketSink, type InputVideoTrack } from 'mediabunny';
 import { chi2, dhash64, hamming, quantizeHist } from './dhash';
 import { getInput } from './input';
 import type { ResolvedSource } from './source';
@@ -193,6 +193,24 @@ async function collectKeyframeTimes(packetSink: EncodedPacketSink, signal?: Abor
 }
 
 /**
+ * The candidate timestamp set every Task 8 sampling pass decodes: every real keyframe union'd with
+ * a fixed `SAMPLE_GRID_SECONDS` grid. Exported so media/embeddingSamples.ts's MobileCLIP/DINOv3
+ * indexing pass samples the *same* instants as scene-detection/dHash similarity, rather than an
+ * independently-computed grid -- per the plan's own "reusing the scene-detection decode pass" Key
+ * Decision for `search_frames`. Needs the video's own track (obtained via `getInput`), not just a
+ * `ResolvedSource`, since keyframe times come from its `EncodedPacketSink`.
+ */
+export async function collectSampleTimestamps(track: InputVideoTrack, duration: number, signal?: AbortSignal): Promise<number[]> {
+  const packetSink = new EncodedPacketSink(track);
+  const keyframeTimes = await collectKeyframeTimes(packetSink, signal);
+
+  const gridTimes: number[] = [];
+  for (let t = 0; t < duration; t += SAMPLE_GRID_SECONDS) gridTimes.push(t);
+
+  return [...new Set([...keyframeTimes, ...gridTimes])].sort((a, b) => a - b);
+}
+
+/**
  * The impure half of scene/similarity sampling: decodes `source` at every keyframe timestamp
  * union'd with a fixed `SAMPLE_GRID_SECONDS` grid, computing a {@link FrameSample} (dHash + color
  * histogram) at each -- the actual candidate stream `detectScenesFromHistograms` and
@@ -207,13 +225,7 @@ export async function sampleFramesForAnalysis(source: ResolvedSource, options: {
   if (!track) throw new Error('no_video_track: this source has no video track to analyze');
 
   const duration = await input.computeDuration();
-  const packetSink = new EncodedPacketSink(track);
-  const keyframeTimes = await collectKeyframeTimes(packetSink, options.signal);
-
-  const gridTimes: number[] = [];
-  for (let t = 0; t < duration; t += SAMPLE_GRID_SECONDS) gridTimes.push(t);
-
-  const timestamps = [...new Set([...keyframeTimes, ...gridTimes])].sort((a, b) => a - b);
+  const timestamps = await collectSampleTimestamps(track, duration, options.signal);
 
   const canvasSink = new CanvasSink(track, { width: SAMPLE_WIDTH, height: SAMPLE_HEIGHT, fit: 'fill', poolSize: 2 });
   const samples: FrameSample[] = [];

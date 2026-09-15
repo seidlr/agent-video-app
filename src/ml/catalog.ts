@@ -158,6 +158,50 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     // plan's own "51 MB" figure.
     approxMB: 51,
   },
+  {
+    id: 'mobileclip-s0',
+    // Loads two independent model classes (CLIPTextModelWithProjection + CLIPVisionModelWith
+    // Projection) rather than one pipeline() call -- see ml/embed.worker.ts's own docstring. Not
+    // a real transformers.js pipeline task; cosmetic display label only (usesPipeline:false).
+    task: 'feature-extraction',
+    repo: 'Xenova/mobileclip_s0',
+    dtype: 'int8',
+    family: 'embed',
+    device: 'wasm', // int8 is a CPU-oriented quantization; no WebGPU kernel benefit at this size
+    // Apple's own weights license (verified via github.com/apple/ml-mobileclip's LICENSE_MODELS,
+    // identical text mirrored on huggingface.co/apple/MobileCLIP-S0/blob/main/LICENSE): the
+    // "Apple Machine Learning Research Model License Agreement", which grants use "exclusively
+    // for Research Purposes" and explicitly excludes commercial exploitation or use in any
+    // commercial product/service. This app's own `search_frames` gate surfaces this exact string
+    // in list_models/the Models panel before any download, but shipping this feature in a
+    // publicly deployed tool is a product/legal call outside this implementation's scope -- see
+    // the plan's own Task 8 Deviations entry.
+    license: 'Apple ML Research Model License (research use only, no commercial use)',
+    url: 'https://huggingface.co/Xenova/mobileclip_s0',
+    // Verified against the live HF tree API: onnx/text_model_int8.onnx (42,799,230 B) +
+    // onnx/vision_model_int8.onnx (11,846,808 B), matching the plan's own "42.8 MB"/"11.8 MB"
+    // figures exactly.
+    approxMB: 55,
+    usesPipeline: false,
+  },
+  {
+    id: 'dinov3-vits16',
+    task: 'image-feature-extraction',
+    repo: 'onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX',
+    dtype: 'q4',
+    family: 'embed',
+    device: 'webgpu',
+    // Meta's own "DINOv3 License" (ai.meta.com/resources/models-and-libraries/dinov3-license) --
+    // a custom but genuinely commercial-use-permitting license (unlike MobileCLIP's above),
+    // conditioned on displaying "Built with DINOv3" somewhere in the product; noted here and in
+    // the plan's Task 8 Deviations as an attribution item for a later docs/credits task, not
+    // implemented as UI yet.
+    license: 'DINOv3 License (commercial use OK; requires "Built with DINOv3" attribution)',
+    url: 'https://huggingface.co/onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX',
+    // Verified against the live HF tree API: onnx/model_q4.onnx (152,401 B) +
+    // onnx/model_q4.onnx_data (14,684,160 B), matching the plan's own "q4 15 MB" figure.
+    approxMB: 15,
+  },
 ];
 
 export function getCatalogEntry(id: string): ModelCatalogEntry | undefined {

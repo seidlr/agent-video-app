@@ -48,6 +48,7 @@ const EXPECTED_TOOL_NAMES = [
   'track',
   'detect_scenes',
   'find_similar_frames',
+  'search_frames',
   'detect_objects',
   'transcribe',
   'get_transcript',

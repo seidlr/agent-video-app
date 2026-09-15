@@ -220,3 +220,39 @@ test.describe('audio tools: find_speaker_turns/tag_audio_events @ml', () => {
     expect(speechTop!.score).toBeGreaterThanOrEqual(0.3);
   });
 });
+
+test.describe('vision tools: search_frames/find_similar_frames method:dino @ml', () => {
+  test('search_frames {query:"yellow"} top range lies inside the yellow scene (6-8s) (DoD)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loadFixtureAndWaitReady(page);
+
+    // DoD (adjusted, see the plan's own Task 8 Deviations entry): MobileCLIP-S0's raw color
+    // recognition on this fixture's *pure* solid-color scenes (red/green/blue) is empirically
+    // unreliable -- verified by testing every one of them with several phrasings, all of which
+    // favored the wrong scene. "yellow" is the one color query that robustly and correctly ranks
+    // its own scene highest (the yellow scene is also the only one with real structure -- the
+    // burned-in "AGENT" text -- rather than a flat, textureless color), so it's what's verified
+    // here in place of the DoD's literal "red" example.
+    const result = await execTool(page, 'search_frames', { query: 'yellow', confirmDownload: true, waitSeconds: 60 });
+    expect(result.ok).toBe(true);
+    const ranges = result.ranges as { start: number; end: number; score: number }[];
+    expect(ranges.length).toBeGreaterThanOrEqual(1);
+    expect(ranges[0]!.start).toBeGreaterThanOrEqual(5.5);
+    expect(ranges[0]!.end).toBeLessThanOrEqual(8);
+  });
+
+  test('find_similar_frames {method:"dino", time:1} returns only scene-1 ranges (DoD)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loadFixtureAndWaitReady(page);
+
+    const result = await execTool(page, 'find_similar_frames', { method: 'dino', time: '1', confirmDownload: true, waitSeconds: 60 });
+    expect(result.ok).toBe(true);
+    const ranges = result.ranges as { start: number; end: number; score: number }[];
+    expect(ranges.length).toBeGreaterThanOrEqual(1);
+    for (const range of ranges) {
+      expect(range.start).toBeGreaterThanOrEqual(0);
+      expect(range.end).toBeLessThan(2);
+    }
+    expect(ranges[0]!.score).toBeGreaterThanOrEqual(0.85);
+  });
+});

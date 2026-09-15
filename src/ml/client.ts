@@ -256,6 +256,8 @@ function spawnWorkerForFamily(family: ModelCatalogEntry['family']): Worker {
       return new Worker(new URL('./detect.worker.ts', import.meta.url), { type: 'module' });
     case 'audio':
       return new Worker(new URL('./audio-events.worker.ts', import.meta.url), { type: 'module' });
+    case 'embed':
+      return new Worker(new URL('./embed.worker.ts', import.meta.url), { type: 'module' });
     default:
       throw new Error(`no_worker_for_family: ${family} (its worker file doesn't exist yet)`);
   }

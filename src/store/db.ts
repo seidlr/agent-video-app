@@ -41,6 +41,18 @@ export interface HashRow {
   hist: number[];
 }
 
+/** One sampled frame's embedding for Task 8's `search_frames` (MobileCLIP) and `find_similar_
+ * frames {method:'dino'}` (DINOv3) indexes -- kept as a separate table from `hashes` since the two
+ * indexes are built independently (different models, different embed dimensions) and a video may
+ * have one, both, or neither built depending on which tools the agent has actually called. */
+export interface EmbeddingRow {
+  id: string;
+  assetId: string;
+  kind: 'mobileclip' | 'dino';
+  time: number;
+  vector: number[];
+}
+
 /** The `boxes` table's on-disk shape: every in-memory `Box` field plus the mask PNG itself when
  * one exists (Task 7's `segment` tool) -- kept off the in-memory `Box` type (which only carries
  * `maskId`) so the store never holds a multi-hundred-KB Blob in every selector's return value. */
@@ -60,6 +72,7 @@ export class StudioDB extends Dexie {
   clips!: Table<Clip, string>;
   thumbnails!: Table<ThumbnailRow, string>;
   hashes!: Table<HashRow, string>;
+  embeddings!: Table<EmbeddingRow, string>;
 
   constructor(name = 'agent-video-studio') {
     super(name);
@@ -75,6 +88,7 @@ export class StudioDB extends Dexie {
       clips: 'id, order',
       thumbnails: 'id, assetId',
       hashes: 'id, assetId, time',
+      embeddings: 'id, assetId, kind, time',
     });
   }
 }

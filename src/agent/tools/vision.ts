@@ -1,7 +1,9 @@
-import { getMlQueryOverrides, mlClient } from '../../ml/client';
+import { getMlQueryOverrides, mlClient, type MlWorker } from '../../ml/client';
 import { getCatalogEntry, pickDetectModel, pickSegmentModel } from '../../ml/catalog';
 import { dilatePixelBox, getTracker, toGrayscale, trackFrames, type GrayFrame, type PixelBox } from '../../ml/tracker';
 import { dhash64, quantizeHist } from '../../media/dhash';
+import { sampleBitmapsForEmbedding } from '../../media/embeddingSamples';
+import { findTopRanges } from '../../media/embeddingSearch';
 import {
   detectScenesFromHistograms,
   ensureFrameSamples,
@@ -14,8 +16,10 @@ import type { BoxSource } from '../../lib/types';
 import { parseTime, secsToTimecode } from '../../lib/time';
 import { getVideoElement } from '../../lib/videoElement';
 import { persistBox, persistTrack } from '../../store/boxes';
+import { getPersistedEmbeddings, persistEmbeddings, type StoredEmbedding } from '../../store/embeddings';
 import type { StudioStore } from '../../store/studio';
-import type { Registry, ToolResult } from '../registry';
+import type { Registry, ToolCallContext, ToolResult } from '../registry';
+import type { ResolvedSource } from '../../media/source';
 
 interface SegmentPoint {
   x: number;
@@ -298,9 +302,18 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
     },
   });
 
-  registry.define<{ frameId?: string; time?: string | number; maxDistance?: number; maxColorDistance?: number }>({
+  registry.define<{
+    frameId?: string;
+    time?: string | number;
+    maxDistance?: number;
+    maxColorDistance?: number;
+    method?: 'hash' | 'dino';
+    minScore?: number;
+    confirmDownload?: boolean;
+  }>({
     name: 'find_similar_frames',
-    description: 'Finds time ranges visually similar to a reference frame (by captured frameId or a timestamp), using a color-aware perceptual hash.',
+    description:
+      'Finds time ranges visually similar to a reference frame (by captured frameId or a timestamp). Default `method:"hash"` uses a color-aware perceptual hash (no model download); `method:"dino"` uses DINOv3 patch-feature cosine similarity, more robust to lighting/angle changes but needs a model download.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -308,13 +321,16 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
         time: { type: ['string', 'number'] },
         maxDistance: { type: 'number', minimum: 0 },
         maxColorDistance: { type: 'number', minimum: 0 },
+        method: { type: 'string', enum: ['hash', 'dino'] },
+        minScore: { type: 'number', minimum: 0, maximum: 1 },
+        confirmDownload: { type: 'boolean' },
       },
     },
     annotations: { readOnlyHint: true },
     group: 'vision',
     when: 'local',
     mode: 'job',
-    handler: async (args): Promise<ToolResult> => {
+    handler: async (args, ctx): Promise<ToolResult> => {
       const state = store.getState();
       if (!state.source) return { ok: false, error: 'no_video_loaded' };
       if (state.source.kind === 'youtube') {
@@ -322,6 +338,10 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
       }
       if (args.frameId === undefined && args.time === undefined) {
         return { ok: false, error: 'invalid_query', hint: 'Provide `frameId` (a captured frame) or `time`.' };
+      }
+
+      if (args.method === 'dino') {
+        return findSimilarByDino(store, args as { frameId?: string; time?: string | number; minScore?: number; confirmDownload?: boolean }, ctx);
       }
 
       const samples = await ensureFrameSamples(state.source);
@@ -340,6 +360,47 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
 
       const ranges = findSimilarRanges(samples, query, { maxDistance: args.maxDistance, maxColorDistance: args.maxColorDistance });
       return { ok: true, summary: `${ranges.length} matching range(s)`, ranges };
+    },
+  });
+
+  registry.define<{ query: string; topK?: number; minScore?: number; confirmDownload?: boolean }>({
+    name: 'search_frames',
+    description:
+      'Finds time ranges matching a natural-language description (MobileCLIP text-to-image search), e.g. "a solid red image" or "a person talking". First call without confirmDownload to see the model size; the first call for a given video also builds its search index (may take a while for a long video).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        topK: { type: 'integer', minimum: 1 },
+        minScore: { type: 'number', minimum: 0, maximum: 1 },
+        confirmDownload: { type: 'boolean' },
+      },
+      required: ['query'],
+    },
+    annotations: { readOnlyHint: true },
+    group: 'vision',
+    when: 'local',
+    mode: 'job',
+    handler: async (args, ctx): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'search_frames_unavailable_on_youtube', hint: 'Needs direct pixel access; not available for a YouTube source.' };
+      }
+      if (!args.query.trim()) return { ok: false, error: 'invalid_query', hint: '`query` must not be empty' };
+
+      const indexed = await ensureEmbeddingIndex(state.source, 'mobileclip', 'mobileclip-s0', store, args.confirmDownload, ctx);
+      if (!indexed.ok) return indexed.result;
+
+      const queryVector = await indexed.worker.call<Float32Array>('embed_text', { query: args.query });
+      // Verified empirically against the real model+fixture (see the plan's own Task 8
+      // Deviations entry): MobileCLIP-S0's raw cosine similarities on this app's own sampled
+      // frames cluster far lower than typical CLIP-benchmark numbers -- a genuinely relevant
+      // match lands around 0.10-0.15, an irrelevant one around 0.00-0.07. 0.2 (a more standard
+      // CLIP relevance threshold) filtered out every result, including correct ones.
+      const ranges = findTopRanges(indexed.samples, queryVector, { minScore: args.minScore ?? 0.08 });
+      const topK = args.topK ?? 5;
+      return { ok: true, summary: `${Math.min(ranges.length, topK)} matching range(s)`, ranges: ranges.slice(0, topK) };
     },
   });
 
@@ -432,4 +493,108 @@ async function hashFromImageUrl(url: string): Promise<FrameSample> {
   bitmap.close();
   const { data } = ctx.getImageData(0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
   return { time: -1, dhash: dhash64(data, SAMPLE_WIDTH, SAMPLE_HEIGHT), hist: quantizeHist(data, SAMPLE_WIDTH, SAMPLE_HEIGHT) };
+}
+
+type EmbeddingIndexResult = { ok: true; samples: StoredEmbedding[]; worker: MlWorker } | { ok: false; result: ToolResult };
+
+/** In-session cache (same shape as media/scenes.ts's own `ensureFrameSamples`), keyed by source
+ * identity + which model's index this is -- MobileCLIP's and DINOv3's indexes are built and cached
+ * independently since a call to one tool shouldn't force-build the other's. */
+const embeddingIndexCache = new Map<string, StoredEmbedding[]>();
+
+function embeddingCacheKey(source: ResolvedSource, kind: 'mobileclip' | 'dino'): string {
+  return `${source.assetId ?? source.src}:${kind}`;
+}
+
+/**
+ * The one entry point `search_frames`/`find_similar_frames {method:'dino'}` both call: gates on
+ * `confirmDownload` for `modelId`, then returns an already-built index from the in-session cache
+ * or Dexie, or builds a fresh one by decoding every candidate frame (media/embeddingSamples.ts,
+ * reusing scene-detection's own timestamp set) and embedding each through the now-resident
+ * worker -- mirroring `ensureFrameSamples`'s own cache-then-Dexie-then-decode order, extended with
+ * the model-loading gate neither dHash nor histogram sampling need.
+ */
+async function ensureEmbeddingIndex(
+  source: ResolvedSource,
+  kind: 'mobileclip' | 'dino',
+  modelId: string,
+  store: StudioStore,
+  confirmDownload: boolean | undefined,
+  ctx: ToolCallContext,
+): Promise<EmbeddingIndexResult> {
+  const ensured = await mlClient.ensureModel(modelId, {
+    confirmDownload,
+    onProgress: (fraction) => store.getState().setModelState(modelId, { progress: fraction }),
+  });
+  if (!ensured.ok) {
+    if (ensured.error === 'unknown_model') return { ok: false, result: { ok: false, error: 'unknown_model', hint: `no model with id "${modelId}"` } };
+    return { ok: false, result: { ok: false, error: ensured.error, hint: ensured.hint } };
+  }
+  store.getState().setModelState(modelId, { loaded: true, cached: true, progress: 1 });
+  const worker = ensured.worker;
+
+  const cacheKey = embeddingCacheKey(source, kind);
+  const cached = embeddingIndexCache.get(cacheKey);
+  if (cached) return { ok: true, samples: cached, worker };
+
+  if (source.assetId) {
+    const persisted = await getPersistedEmbeddings(source.assetId, kind);
+    if (persisted.length > 0) {
+      embeddingIndexCache.set(cacheKey, persisted);
+      return { ok: true, samples: persisted, worker };
+    }
+  }
+
+  const method = kind === 'mobileclip' ? 'embed_image' : 'embed_dino';
+  const samples: StoredEmbedding[] = [];
+  for await (const frame of sampleBitmapsForEmbedding(source, { signal: ctx.signal })) {
+    const vector = await worker.call<Float32Array>(method, { bitmap: frame.bitmap });
+    frame.bitmap.close();
+    samples.push({ time: frame.time, vector });
+    // No cheap way to know the total candidate count up front without a second pass over the
+    // whole video, so this asymptotically approaches (never reaches) 0.95 rather than reporting a
+    // real percentage -- still a useful "it's moving" signal for get_job's progress field.
+    ctx.progress(Math.min(0.95, samples.length / (samples.length + 20)), `Indexed ${samples.length} frame(s)`);
+  }
+
+  embeddingIndexCache.set(cacheKey, samples);
+  if (source.assetId) await persistEmbeddings(source.assetId, kind, samples);
+  return { ok: true, samples, worker };
+}
+
+/** The `method:'dino'` branch of `find_similar_frames`: same query-resolution shape as the default
+ * hash method (a captured `frameId` decoded and embedded fresh, or the nearest already-indexed
+ * sample to `time`), scored by DINOv3 patch-mean cosine similarity instead of hamming+chi2. */
+async function findSimilarByDino(
+  store: StudioStore,
+  args: { frameId?: string; time?: string | number; minScore?: number; confirmDownload?: boolean },
+  ctx: ToolCallContext,
+): Promise<ToolResult> {
+  const state = store.getState();
+  if (!state.source || state.source.kind === 'youtube') return { ok: false, error: 'no_video_loaded' };
+
+  const indexed = await ensureEmbeddingIndex(state.source, 'dino', 'dinov3-vits16', store, args.confirmDownload, ctx);
+  if (!indexed.ok) return indexed.result;
+  if (indexed.samples.length === 0) return { ok: false, error: 'no_samples', hint: 'Nothing could be sampled from this source.' };
+
+  let queryVector: ArrayLike<number>;
+  if (args.frameId !== undefined) {
+    const frame = state.frames.find((f) => f.id === args.frameId);
+    if (!frame) return { ok: false, error: 'unknown_frame', hint: `no frame with id "${args.frameId}"` };
+    const blob = await fetch(frame.blobUrl).then((r) => r.blob());
+    const bitmap = await createImageBitmap(blob);
+    try {
+      queryVector = await indexed.worker.call<Float32Array>('embed_dino', { bitmap });
+    } finally {
+      bitmap.close();
+    }
+  } else {
+    const target = parseTime(args.time as string | number, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
+    if (target === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+    const nearest = indexed.samples.reduce((best, s) => (Math.abs(s.time - target) < Math.abs(best.time - target) ? s : best), indexed.samples[0] as StoredEmbedding);
+    queryVector = nearest.vector;
+  }
+
+  const ranges = findTopRanges(indexed.samples, queryVector, { minScore: args.minScore ?? 0.85 });
+  return { ok: true, summary: `${ranges.length} matching range(s)`, ranges };
 }

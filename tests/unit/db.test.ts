@@ -13,7 +13,7 @@ describe('StudioDB', () => {
     db = new StudioDB('test-db-open');
     await db.open();
     expect(db.tables.map((t) => t.name).sort()).toEqual(
-      ['assets', 'boxes', 'chapters', 'clips', 'frames', 'hashes', 'notes', 'projects', 'thumbnails', 'tracks', 'transcripts'].sort(),
+      ['assets', 'boxes', 'chapters', 'clips', 'embeddings', 'frames', 'hashes', 'notes', 'projects', 'thumbnails', 'tracks', 'transcripts'].sort(),
     );
   });
 
