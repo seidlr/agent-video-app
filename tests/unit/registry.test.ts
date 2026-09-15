@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRegistry, type ToolDefinition, type ToolResult } from '../../src/agent/registry';
+import { buildManifest, createRegistry, type ToolDefinition, type ToolResult } from '../../src/agent/registry';
 import type { ToolCall } from '../../src/lib/types';
 
 function sleep(ms: number): Promise<void> {
@@ -201,5 +201,28 @@ describe('createRegistry', () => {
       await sleep(150); // let the handler's own sleep(100) elapse so we can check it observed the abort
       expect(registry.jobs.get(jobId)?.status).toBe('cancelled'); // not resurrected by the handler's resolution
     });
+  });
+});
+
+describe('buildManifest (Task 11: the server\'s serializable view of the registry)', () => {
+  it('strips handler and keeps every other field a manifest tool needs', () => {
+    const manifest = buildManifest([PING_TOOL]);
+    expect(manifest).toEqual([
+      {
+        name: 'ping',
+        description: 'Echoes back the given time.',
+        inputSchema: PING_TOOL.inputSchema,
+        annotations: PING_TOOL.annotations,
+        group: 'session',
+        when: 'always',
+        mode: undefined,
+      },
+    ]);
+    expect(manifest[0]).not.toHaveProperty('handler');
+  });
+
+  it('round-trips through JSON.stringify with no loss (server reads it back from a plain .json file)', () => {
+    const manifest = buildManifest([PING_TOOL]);
+    expect(JSON.parse(JSON.stringify(manifest))).toEqual(manifest);
   });
 });

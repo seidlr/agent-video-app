@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite-node scripts/run-build-skill.ts && vite build",
+    "build": "vite-node scripts/run-build-skill.ts && vite-node scripts/run-build-server-manifest.ts && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --build --force",
     "lint": "eslint .",

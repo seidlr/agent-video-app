@@ -1,0 +1,1526 @@
+[
+  {
+    "name": "get_state",
+    "description": "Reports the full current studio state: the loaded source, player transport, item counts, capabilities, and hints for what to do next. Call this first.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "session",
+    "when": "always"
+  },
+  {
+    "name": "get_agent_skill",
+    "description": "Returns the agent skill documentation (SKILL.md) describing how to use this app's tools -- workflows, the tool response envelope, the job protocol, model-download gating, and safety notes. Pass `section` (a heading, e.g. \"Workflows\") to get just that part instead of the whole document.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "section": {
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "session",
+    "when": "always"
+  },
+  {
+    "name": "get_job",
+    "description": "Reports the status, progress and (once finished) result of a background job started by a job-mode tool.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "session",
+    "when": "always"
+  },
+  {
+    "name": "list_jobs",
+    "description": "Lists every background job started this session, most recent last.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "session",
+    "when": "always"
+  },
+  {
+    "name": "cancel_job",
+    "description": "Cancels a running background job.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId"
+      ]
+    },
+    "group": "session",
+    "when": "always"
+  },
+  {
+    "name": "say",
+    "description": "Posts a message from the agent into the Activity feed, visible to the human watching the page.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ]
+    },
+    "group": "session",
+    "when": "always"
+  },
+  {
+    "name": "set_view",
+    "description": "Switches the right-rail panel and/or the overall layout.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "panel": {
+          "type": "string",
+          "enum": [
+            "library",
+            "notes",
+            "frames",
+            "tracking",
+            "vision",
+            "transcript",
+            "clips",
+            "effects",
+            "models",
+            "activity",
+            "skill"
+          ]
+        },
+        "layout": {
+          "type": "string",
+          "enum": [
+            "studio",
+            "focus"
+          ]
+        }
+      }
+    },
+    "group": "session",
+    "when": "always"
+  },
+  {
+    "name": "list_library",
+    "description": "Lists the sample catalog and every video stored locally in this browser.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "library",
+    "when": "always"
+  },
+  {
+    "name": "load_video",
+    "description": "Loads a video into the player: a sample by id, a video already in your library by id, a CORS-enabled URL, or a YouTube link.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "sample",
+            "library",
+            "url",
+            "youtube"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ]
+    },
+    "group": "library",
+    "when": "always"
+  },
+  {
+    "name": "request_file_upload",
+    "description": "Switches to the Library panel and focuses the local-file input, so an agent with a file-upload capability (or the human) can attach a video.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "group": "library",
+    "when": "always"
+  },
+  {
+    "name": "remove_video",
+    "description": "Deletes a stored video from the library (its bytes and metadata).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "annotations": {
+      "consequentialHint": true
+    },
+    "group": "library",
+    "when": "always"
+  },
+  {
+    "name": "play",
+    "description": "Starts (or resumes) playback.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "group": "playback",
+    "when": "always"
+  },
+  {
+    "name": "pause",
+    "description": "Pauses playback.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "group": "playback",
+    "when": "always"
+  },
+  {
+    "name": "toggle_play",
+    "description": "Plays if paused, pauses if playing.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "group": "playback",
+    "when": "always"
+  },
+  {
+    "name": "seek",
+    "description": "Moves the playhead. Accepts seconds (12.5), a timecode (\"1:23.400\"), a relative offset (\"+5\", \"-2\"), a percent of duration (\"50%\"), or a frame (\"f30\").",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        }
+      },
+      "required": [
+        "time"
+      ]
+    },
+    "group": "playback",
+    "when": "always"
+  },
+  {
+    "name": "step_frames",
+    "description": "Steps the playhead by an exact number of frames (negative steps backward). Intended for use while paused.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "count"
+      ]
+    },
+    "group": "playback",
+    "when": "local"
+  },
+  {
+    "name": "set_playback",
+    "description": "Sets volume, mute, playback rate, and/or an in-page A/B loop.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "muted": {
+          "type": "boolean"
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4
+        },
+        "loop": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "start": {
+              "type": "number"
+            },
+            "end": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ]
+        }
+      }
+    },
+    "group": "playback",
+    "when": "always"
+  },
+  {
+    "name": "capture_frame",
+    "description": "Captures the exact currently-displayed video frame as an image. Shows it in the Frames tray, and optionally downloads it or returns it as a data URL for a host with no file access.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "png",
+            "jpeg",
+            "webp"
+          ]
+        },
+        "maxWidth": {
+          "type": "number",
+          "minimum": 1
+        },
+        "includeOverlays": {
+          "type": "boolean"
+        },
+        "download": {
+          "type": "boolean"
+        },
+        "includeDataUrl": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "stay": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "frames",
+    "when": "yt"
+  },
+  {
+    "name": "list_frames",
+    "description": "Lists every frame captured this session (the Frames tray).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "frames",
+    "when": "always"
+  },
+  {
+    "name": "delete_frame",
+    "description": "Removes a captured frame from the Frames tray.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "frameId": {
+          "type": "string"
+        }
+      }
+    },
+    "group": "frames",
+    "when": "always"
+  },
+  {
+    "name": "generate_thumbnails",
+    "description": "Generates a thumbnail sprite for the loaded video and wires it into the timeline hover preview. Give either count (evenly spread) or intervalSeconds (fixed spacing).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "intervalSeconds": {
+          "type": "number",
+          "minimum": 0.1
+        },
+        "contactSheet": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "frames",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "add_note",
+    "description": "Adds a timestamped note, either a single point in time or a region (with `end`). Tags are freeform.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "end": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "time",
+        "text"
+      ]
+    },
+    "group": "notes",
+    "when": "always"
+  },
+  {
+    "name": "list_notes",
+    "description": "Lists every note on the timeline, sorted by time.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "notes",
+    "when": "always"
+  },
+  {
+    "name": "update_note",
+    "description": "Edits an existing note's time, end, text, or tags.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "noteId": {
+          "type": "string"
+        },
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "end": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "noteId"
+      ]
+    },
+    "group": "notes",
+    "when": "always"
+  },
+  {
+    "name": "delete_note",
+    "description": "Removes a note from the timeline.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "noteId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "noteId"
+      ]
+    },
+    "group": "notes",
+    "when": "always"
+  },
+  {
+    "name": "add_chapter",
+    "description": "Adds a chapter (a titled time range). Rejects a range that overlaps an existing chapter.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "end": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "title"
+      ]
+    },
+    "group": "chapters",
+    "when": "always"
+  },
+  {
+    "name": "list_chapters",
+    "description": "Lists every chapter, sorted by start time.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "chapters",
+    "when": "always"
+  },
+  {
+    "name": "update_chapter",
+    "description": "Edits an existing chapter's start, end, or title.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chapterId": {
+          "type": "string"
+        },
+        "start": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "end": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "chapterId"
+      ]
+    },
+    "group": "chapters",
+    "when": "always"
+  },
+  {
+    "name": "delete_chapter",
+    "description": "Removes a chapter.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chapterId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "chapterId"
+      ]
+    },
+    "group": "chapters",
+    "when": "always"
+  },
+  {
+    "name": "import_vtt",
+    "description": "Imports chapters from a WEBVTT string, adding every cue that does not overlap an existing chapter.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "vtt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vtt"
+      ]
+    },
+    "group": "chapters",
+    "when": "always"
+  },
+  {
+    "name": "list_boxes",
+    "description": "Lists boxes, optionally filtered to only those visible at a given time.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "boxes",
+    "when": "always"
+  },
+  {
+    "name": "add_box",
+    "description": "Draws a box overlay at a point in time (or a range, with `until`). Coordinates are normalized [0,1] fractions of the frame.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "until": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "w": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "h": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "time",
+        "x",
+        "y",
+        "w",
+        "h",
+        "label"
+      ]
+    },
+    "group": "boxes",
+    "when": "always"
+  },
+  {
+    "name": "update_box",
+    "description": "Edits an existing box's time, until, coordinates, or label.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "boxId": {
+          "type": "string"
+        },
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "until": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "w": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "h": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "boxId"
+      ]
+    },
+    "group": "boxes",
+    "when": "always"
+  },
+  {
+    "name": "delete_box",
+    "description": "Removes a box.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "boxId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "boxId"
+      ]
+    },
+    "group": "boxes",
+    "when": "always"
+  },
+  {
+    "name": "clear_boxes",
+    "description": "Removes every box.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "consequentialHint": true
+    },
+    "group": "boxes",
+    "when": "always"
+  },
+  {
+    "name": "list_clips",
+    "description": "Lists the clips currently on the timeline, in export order.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "clips",
+    "when": "always"
+  },
+  {
+    "name": "add_clip",
+    "description": "Adds a non-destructive clip range for export_video/export_gif. Clips are ordered by when they were added; use reorder_clips to change that.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "end": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "group": "clips",
+    "when": "always"
+  },
+  {
+    "name": "remove_clip",
+    "description": "Removes a clip.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "clipId"
+      ]
+    },
+    "group": "clips",
+    "when": "always"
+  },
+  {
+    "name": "reorder_clips",
+    "description": "Reorders clips (and therefore their concatenation order in export_video) to match the given list of clip ids.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "order"
+      ]
+    },
+    "group": "clips",
+    "when": "always"
+  },
+  {
+    "name": "export_notes",
+    "description": "Exports notes/chapters/boxes as markdown, json, vtt, srt, csv, or edl text. The full text is always in the result -- download/copyToClipboard are optional extra delivery channels for a host with file access or clipboard access instead of (or in addition to) reading the JSON result.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json",
+            "vtt",
+            "srt",
+            "csv",
+            "edl"
+          ]
+        },
+        "download": {
+          "type": "boolean"
+        },
+        "copyToClipboard": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "format"
+      ]
+    },
+    "group": "export",
+    "when": "always"
+  },
+  {
+    "name": "export_project",
+    "description": "Exports the current project (notes, chapters, boxes, tracks, clips, captured frames, and a transcript if one exists) as a .zip -- notes.md and a project.json alongside frames/*.png. Re-import it via the Library panel's \"Import project\" button. Metadata only for now: the source video itself is not bundled.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "download": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "export",
+    "when": "always"
+  },
+  {
+    "name": "export_video",
+    "description": "Trims and concatenates clips (added via add_clip) into a single mp4/webm file, optionally burning box overlays into the video. First call may take a while for long clips -- this is a job-mode tool; poll with get_job if it does not finish inline.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "clips": {
+          "type": [
+            "string",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "mp4",
+            "webm"
+          ]
+        },
+        "width": {
+          "type": "number",
+          "minimum": 16
+        },
+        "burnOverlays": {
+          "type": "boolean"
+        },
+        "download": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "clips"
+      ]
+    },
+    "annotations": {
+      "consequentialHint": true
+    },
+    "group": "export",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "export_gif",
+    "description": "Exports a time range as a GIF (default 320px wide, 10fps). Capped at 300 frames -- fails with too_many_frames if the range/fps combination would exceed that.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "end": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "width": {
+          "type": "number",
+          "minimum": 16
+        },
+        "fps": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "download": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "group": "export",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "list_models",
+    "description": "Lists every model this app can load: size, license, and whether it is cached locally or currently loaded in memory.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "models",
+    "when": "always"
+  },
+  {
+    "name": "load_model",
+    "description": "Downloads (if not already cached) and loads a model into memory, ready for the tools that use it. First call without confirmDownload to see the size; pass confirmDownload:true to actually download.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "group": "models",
+    "when": "always",
+    "mode": "job"
+  },
+  {
+    "name": "unload_model",
+    "description": "Frees a loaded model from memory (GPU buffers/worker terminated).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "group": "models",
+    "when": "always"
+  },
+  {
+    "name": "segment",
+    "description": "Segments an object at a point or box prompt (EdgeTAM on WebGPU, SlimSAM on wasm), adding the resulting mask + tight bounding box as a new box. First call without confirmDownload to see the model size.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "label": {
+                "type": "integer",
+                "enum": [
+                  0,
+                  1
+                ]
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          }
+        },
+        "box": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "w": {
+              "type": "number"
+            },
+            "h": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "w",
+            "h"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        },
+        "stay": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "track",
+    "description": "Tracks an existing box forward in time using template matching (NCC by default), producing keyframes the timeline interpolates between.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "boxId": {
+          "type": "string"
+        },
+        "until": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "stepSeconds": {
+          "type": "number",
+          "minimum": 0.05
+        },
+        "method": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "boxId"
+      ]
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "detect_scenes",
+    "description": "Detects scene/shot boundaries via color histogram analysis. Optionally adds a chapter (\"Scene N\") per detected scene.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "addChapters": {
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "type": "number",
+          "minimum": 0.01
+        },
+        "minSceneDuration": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "find_similar_frames",
+    "description": "Finds time ranges visually similar to a reference frame (by captured frameId or a timestamp). Default `method:\"hash\"` uses a color-aware perceptual hash (no model download); `method:\"dino\"` uses DINOv3 patch-feature cosine similarity, more robust to lighting/angle changes but needs a model download.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "frameId": {
+          "type": "string"
+        },
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "maxDistance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maxColorDistance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "hash",
+            "dino"
+          ]
+        },
+        "minScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "search_frames",
+    "description": "Finds time ranges matching a natural-language description (MobileCLIP text-to-image search), e.g. \"a solid red image\" or \"a person talking\". First call without confirmDownload to see the model size; the first call for a given video also builds its search index (may take a while for a long video).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "topK": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "detect_objects",
+    "description": "Detects objects in a frame: closed-set (RF-DETR-nano on WebGPU / YOLOS-tiny on wasm) by default, or zero-shot (Grounding-DINO) when `labels` is given (e.g. [\"a red car\", \"a person\"]). First call without confirmDownload to see the model size.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "addBoxes": {
+          "type": "boolean"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "estimate_depth",
+    "description": "Estimates monocular depth at a frame (Depth Anything v2). format:\"stats\" (default) returns near/far/mean/variance and an inferred shotType (close-up/medium/wide); format:\"image\" also adds a colorized depth map to the Frames tray. First call without confirmDownload to see the model size.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "image",
+            "stats"
+          ]
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "detect_faces",
+    "description": "Detects faces at a frame (MediaPipe BlazeFace short-range): box + 6 keypoints per face. First call without confirmDownload to see the model size.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "addBoxes": {
+          "type": "boolean"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "detect_pose",
+    "description": "Detects body pose landmarks at a frame (MediaPipe pose-landmarker-lite): 33 normalized landmarks per detected person. First call without confirmDownload to see the model size.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "addBoxes": {
+          "type": "boolean"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "vision",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "transcribe",
+    "description": "Transcribes the video's audio with Whisper, adding timestamped segments to the transcript. First call without confirmDownload to see the model size. Omit from/to to transcribe the whole video; a partial range replaces only the overlapping segments.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": [
+            "tiny",
+            "base"
+          ]
+        },
+        "from": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "to": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "language": {
+          "type": "string"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "transcript",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "get_transcript",
+    "description": "Returns the transcript (optionally trimmed to a time range) as segments, plain text, SRT, or VTT.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "to": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "text",
+            "segments",
+            "srt",
+            "vtt"
+          ]
+        },
+        "lang": {
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true
+    },
+    "group": "transcript",
+    "when": "after-transcribe"
+  },
+  {
+    "name": "search_transcript",
+    "description": "Case-insensitive substring search over the transcript, returning each hit with its timestamp and neighboring segments for context.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "lang": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "untrustedContentHint": true
+    },
+    "group": "transcript",
+    "when": "after-transcribe"
+  },
+  {
+    "name": "find_speaker_turns",
+    "description": "Detects speaker-change turns in the audio (pyannote speaker diarization), merging consecutive same-speaker segments separated by a gap under 0.3s. Optionally adds a region note per turn.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "to": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "addNotes": {
+          "type": "boolean"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "audio",
+    "when": "local",
+    "mode": "job"
+  },
+  {
+    "name": "tag_audio_events",
+    "description": "Tags audio events (speech, music, environmental sounds, ...) over the clip using a 10s sliding window (AST audio classification), merging adjacent windows that agree on a label. Optionally adds a chapter at each label change.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "to": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "addChapters": {
+          "type": "boolean"
+        },
+        "confirmDownload": {
+          "type": "boolean"
+        }
+      }
+    },
+    "group": "audio",
+    "when": "local",
+    "mode": "job"
+  }
+]

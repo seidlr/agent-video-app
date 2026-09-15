@@ -223,3 +223,28 @@ export function createRegistry(deps: RegistryDeps): Registry {
 
   return { define, list, get, call, jobs };
 }
+
+/** A tool definition stripped to its serializable fields -- no `handler`, which only exists in the
+ * browser instance that actually runs it. This is what `scripts/build-server-manifest.ts` writes
+ * to `server/generated/tool-manifest.json` (Task 11): the MCP server registers one passthrough
+ * "data tool" per manifest entry, whose own handler forwards the call to the bus rather than
+ * running any of this app's real logic itself. */
+export interface ManifestTool {
+  name: string;
+  description: string;
+  inputSchema: JSONSchema;
+  annotations?: ToolAnnotations;
+  group: ToolGroup;
+  when: ToolWhen;
+  mode?: 'job';
+}
+
+// ToolDefinition<any>, matching `createRegistry`'s own internal storage type just above: a plain
+// ToolDefinition[] (defaulting TArgs to Record<string, unknown>) can't structurally accept an array
+// mixing different concrete TArgs (e.g. one tool typed ToolDefinition<{time: number}>) because a
+// handler's argument type is contravariant -- `any` is this file's own established escape hatch
+// for "heterogeneous tool definitions", not a loosening introduced here.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function buildManifest(tools: ToolDefinition<any>[]): ManifestTool[] {
+  return tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations, group: t.group, when: t.when, mode: t.mode }));
+}
