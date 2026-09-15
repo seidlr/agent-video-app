@@ -1,5 +1,5 @@
 import { getMlQueryOverrides, mlClient } from '../../ml/client';
-import { pickSegmentModel } from '../../ml/catalog';
+import { getCatalogEntry, pickDetectModel, pickSegmentModel } from '../../ml/catalog';
 import { dilatePixelBox, getTracker, toGrayscale, trackFrames, type GrayFrame, type PixelBox } from '../../ml/tracker';
 import { dhash64, quantizeHist } from '../../media/dhash';
 import {
@@ -39,6 +39,8 @@ interface SegmentWorkerResult {
   box: { x: number; y: number; w: number; h: number };
   score: number;
 }
+
+type DetectObjectsResult = { label: string; score: number; box: { x: number; y: number; w: number; h: number } }[];
 
 type TrackArgs = {
   boxId: string;
@@ -338,6 +340,81 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
 
       const ranges = findSimilarRanges(samples, query, { maxDistance: args.maxDistance, maxColorDistance: args.maxColorDistance });
       return { ok: true, summary: `${ranges.length} matching range(s)`, ranges };
+    },
+  });
+
+  registry.define<{ time?: string | number; labels?: string[]; threshold?: number; addBoxes?: boolean; confirmDownload?: boolean }>({
+    name: 'detect_objects',
+    description:
+      'Detects objects in a frame: closed-set (RF-DETR-nano on WebGPU / YOLOS-tiny on wasm) by default, or zero-shot (Grounding-DINO) when `labels` is given (e.g. ["a red car", "a person"]). First call without confirmDownload to see the model size.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        time: { type: ['string', 'number'] },
+        labels: { type: 'array', items: { type: 'string' } },
+        threshold: { type: 'number', minimum: 0, maximum: 1 },
+        addBoxes: { type: 'boolean' },
+        confirmDownload: { type: 'boolean' },
+      },
+    },
+    group: 'vision',
+    when: 'local',
+    mode: 'job',
+    handler: async (args): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'detect_objects_unavailable_on_youtube', hint: 'Needs direct pixel access; not available for a YouTube source.' };
+      }
+
+      const video = getVideoElement();
+      if (!video) return { ok: false, error: 'video_not_ready' };
+
+      const zeroShot = !!args.labels?.length;
+      const modelEntry = zeroShot ? getCatalogEntry('grounding-dino-tiny')! : pickDetectModel(state.capabilities.webgpu, getMlQueryOverrides().forceWasm);
+      const ensured = await mlClient.ensureModel(modelEntry.id, {
+        confirmDownload: args.confirmDownload,
+        onProgress: (fraction) => store.getState().setModelState(modelEntry.id, { progress: fraction }),
+      });
+      if (!ensured.ok) {
+        if (ensured.error === 'unknown_model') return { ok: false, error: 'unknown_model', hint: `no model with id "${modelEntry.id}"` };
+        return { ok: false, error: ensured.error, hint: ensured.hint };
+      }
+      store.getState().setModelState(modelEntry.id, { loaded: true, cached: true, progress: 1 });
+
+      let previousTime: number | undefined;
+      if (args.time !== undefined) {
+        const target = parseTime(args.time, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
+        if (target === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+        previousTime = state.player.currentTime;
+        await store.getState().seek(target);
+      }
+
+      const bitmap = await createImageBitmap(video);
+      let detections: DetectObjectsResult;
+      try {
+        detections = await ensured.worker.call<DetectObjectsResult>('detect', { bitmap, labels: args.labels, threshold: args.threshold });
+      } finally {
+        bitmap.close();
+      }
+
+      const capturedAt = video.currentTime;
+      if (previousTime !== undefined) await store.getState().seek(previousTime);
+
+      let boxIds: string[] = [];
+      if (args.addBoxes) {
+        const source: BoxSource = 'detect';
+        boxIds = detections.map((d) =>
+          store.getState().addBox({ time: capturedAt, x: d.box.x, y: d.box.y, w: d.box.w, h: d.box.h, label: d.label, source }),
+        );
+      }
+
+      return {
+        ok: true,
+        summary: `${detections.length} detection(s) at ${secsToTimecode(capturedAt)}${zeroShot ? ` for "${args.labels!.join(', ')}"` : ''}`,
+        detections,
+        boxIds: args.addBoxes ? boxIds : undefined,
+      };
     },
   });
 }

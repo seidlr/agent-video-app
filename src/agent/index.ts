@@ -11,14 +11,16 @@ import { defineModelTools } from './tools/models';
 import { defineNotesTools } from './tools/notes';
 import { definePlaybackTools } from './tools/playback';
 import { defineSessionTools } from './tools/session';
+import { defineTranscriptTools } from './tools/transcript';
 import { defineVisionTools } from './tools/vision';
 import { mountWebMcp } from './webmcp';
 
 /**
  * Builds the registry and defines every tool this app owns so far (session/library/playback from
  * Task 4, frames from Task 5, notes/chapters/boxes/export_notes from Task 6, models/segment/track
- * from Task 7; later tasks add their own groups by calling their own `defineXTools(registry,
- * store)` the same way). Split from `mountAgent` so tests can build a registry without touching
+ * from Task 7, detect_scenes/find_similar_frames/transcribe/get_transcript/search_transcript from
+ * Task 8; later tasks add their own groups by calling their own `defineXTools(registry, store)`
+ * the same way). Split from `mountAgent` so tests can build a registry without touching
  * `window`/`document`.
  */
 export function createAgentRegistry(store: StudioStore): Registry {
@@ -33,6 +35,7 @@ export function createAgentRegistry(store: StudioStore): Registry {
   defineExportsTools(registry, store);
   defineModelTools(registry, store);
   defineVisionTools(registry, store);
+  defineTranscriptTools(registry, store);
   return registry;
 }
 

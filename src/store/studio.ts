@@ -154,6 +154,11 @@ export interface StudioState {
   setModelState(id: string, patch: Partial<ModelState>): void;
   setBoxDrawMode(on: boolean): void;
 
+  /** Replaces the whole in-memory transcript for `lang` (`null` = the original). `transcribe`
+   * (agent/tools/transcript.ts) reads the existing segments first and merges a re-transcribed
+   * range in before calling this, so a full replace here is always the right semantics. */
+  setTranscript(segments: TranscriptSegment[], lang: string | null): void;
+
   addClip(input: Omit<Clip, 'id'>): string;
   removeClip(id: string): void;
   reorderClips(order: string[]): void;
@@ -345,6 +350,9 @@ export function createStudioStore() {
 
     setModelState(id, patch) {
       set((s) => ({ models: { ...s.models, [id]: { cached: false, loaded: false, progress: 0, ...s.models[id], ...patch } } }));
+    },
+    setTranscript(segments, lang) {
+      set({ transcript: { segments, lang } });
     },
     setBoxDrawMode(on) {
       set({ boxDrawMode: on });

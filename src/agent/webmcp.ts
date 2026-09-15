@@ -65,21 +65,43 @@ export async function mountWebMcp(registry: Registry, store: StudioStore): Promi
     await registerToolLoosely(modelContext, toWebMcpTool(tool, registry), { signal: alwaysController.signal });
   }
 
-  let localController: AbortController | null = null;
-  async function refreshLocalTools(): Promise<void> {
-    localController?.abort();
-    localController = new AbortController();
+  // Separate abort-controller lifecycles for the source-driven ('local'/'yt') batch and the
+  // transcript-driven ('after-transcribe') batch. They must NOT share one controller: a job-mode
+  // tool like `transcribe` (registered in the source batch) writes to `transcript` state as the
+  // very last step of its own handler, before its call promise resolves back through the mcp-b
+  // transport -- aborting the SAME controller `transcribe` is registered under at that moment
+  // makes the polyfill reject the still-in-flight call with "Tool unregistered", even though the
+  // handler already computed its result. Confirmed empirically: a single shared controller made
+  // every `transcribe` call fail this way the instant it succeeded.
+  let sourceController: AbortController | null = null;
+  async function refreshSourceTools(): Promise<void> {
+    sourceController?.abort();
+    sourceController = new AbortController();
     const whens = currentLocalWhens(store.getState().source?.kind);
     if (whens.length === 0) return;
     for (const tool of registry.list({ when: whens })) {
       // Non-null: this closure only ever runs after the early `!modelContext` return above.
-      await registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: localController.signal });
+      await registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: sourceController.signal });
     }
   }
 
-  await refreshLocalTools();
+  let transcriptController: AbortController | null = null;
+  async function refreshTranscriptTools(): Promise<void> {
+    transcriptController?.abort();
+    transcriptController = new AbortController();
+    if (store.getState().transcript.segments.length === 0) return;
+    for (const tool of registry.list({ when: ['after-transcribe'] })) {
+      await registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: transcriptController.signal });
+    }
+  }
+
+  await refreshSourceTools();
+  await refreshTranscriptTools();
   store.subscribe((state, prevState) => {
-    if (state.source?.kind !== prevState.source?.kind) void refreshLocalTools();
+    if (state.source?.kind !== prevState.source?.kind) void refreshSourceTools();
+    const hadTranscript = prevState.transcript.segments.length > 0;
+    const hasTranscript = state.transcript.segments.length > 0;
+    if (hadTranscript !== hasTranscript) void refreshTranscriptTools();
   });
 
   return hadNativeContext ? 'webmcp' : 'bridge';

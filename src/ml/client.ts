@@ -1,5 +1,6 @@
 import { ModelRegistry } from '@huggingface/transformers';
-import { MODEL_CATALOG, type ModelCatalogEntry } from './catalog';
+import { detectCapabilities } from '../lib/capabilities';
+import { MODEL_CATALOG, type ModelCatalogEntry, type ModelDevice } from './catalog';
 
 /** One live model instance -- a thin wrapper the real implementation backs with a Worker, and
  * tests back with a fake. `ready` resolves once the model has actually finished loading in the
@@ -242,14 +243,37 @@ function wrapWorker(worker: Worker, onProgress: (fraction: number) => void): { c
   };
 }
 
+/** One dedicated Worker file per model family (Vite's native `new URL(..., import.meta.url)`
+ * worker syntax needs a statically analyzable literal per branch, so this can't be a computed
+ * path) -- each new family's worker file gets its own case here the same task that creates it. */
+function spawnWorkerForFamily(family: ModelCatalogEntry['family']): Worker {
+  switch (family) {
+    case 'segment':
+      return new Worker(new URL('./segment.worker.ts', import.meta.url), { type: 'module' });
+    case 'asr':
+      return new Worker(new URL('./transcribe.worker.ts', import.meta.url), { type: 'module' });
+    case 'detect':
+      return new Worker(new URL('./detect.worker.ts', import.meta.url), { type: 'module' });
+    default:
+      throw new Error(`no_worker_for_family: ${family} (its worker file doesn't exist yet)`);
+  }
+}
+
+/** The actual execution backend to load a model with: `entry.device` is only ever `'wasm'` for a
+ * model that has no webgpu-capable weights at all (e.g. slimsam), in which case there's nothing to
+ * resolve. Everything else resolves live -- WebGPU when the browser actually has it and the
+ * `?ml=wasm` escape hatch hasn't forced wasm, wasm otherwise -- so a single catalog id (e.g.
+ * Whisper, whose repo/dtype don't vary by backend) still runs on whatever this session can. */
+function resolveRuntimeDevice(entry: ModelCatalogEntry): ModelDevice {
+  if (entry.device === 'wasm') return 'wasm';
+  return detectCapabilities().webgpu && !getMlQueryOverrides().forceWasm ? 'webgpu' : 'wasm';
+}
+
 function createWorkerForEntry(entry: ModelCatalogEntry, onProgress: (fraction: number) => void): MlWorker {
-  // Vite's native worker syntax: statically analyzable so the bundler emits segment.worker.ts as
-  // its own chunk rather than trying (and failing) to inline transformers.js into the main page
-  // bundle.
-  const worker = new Worker(new URL('./segment.worker.ts', import.meta.url), { type: 'module' });
+  const worker = spawnWorkerForFamily(entry.family);
   const rpc = wrapWorker(worker, onProgress);
   return {
-    ready: rpc.call('load', { modelId: entry.id }).then(() => undefined),
+    ready: rpc.call('load', { modelId: entry.id, device: resolveRuntimeDevice(entry) }).then(() => undefined),
     call: rpc.call,
     terminate: rpc.terminate,
   };

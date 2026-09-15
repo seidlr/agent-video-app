@@ -48,6 +48,10 @@ const EXPECTED_TOOL_NAMES = [
   'track',
   'detect_scenes',
   'find_similar_frames',
+  'detect_objects',
+  'transcribe',
+  'get_transcript',
+  'search_transcript',
 ];
 
 describe('createAgentRegistry (Task 4/5/6/7/8 DoD: registry.test.ts)', () => {

@@ -5,7 +5,7 @@ const POINT_NOTE_CUE_SECONDS = 2;
 /** SubRip's own timestamp format: HH:MM:SS,mmm -- a comma, not the dot every other format in this
  * app uses (lib/time.ts's formatTime/secsToTimecode), because that comma is SRT's actual on-disk
  * contract, not a stylistic choice. */
-function toSrtTimestamp(secs: number): string {
+export function toSrtTimestamp(secs: number): string {
   const clamped = Math.max(0, secs);
   const hours = Math.floor(clamped / 3600);
   const minutes = Math.floor((clamped % 3600) / 60);
@@ -30,5 +30,12 @@ export function exportSrt(ctx: ExportContext): string {
     const end = note.end ?? note.time + POINT_NOTE_CUE_SECONDS;
     return `${index + 1}\n${toSrtTimestamp(note.time)} --> ${toSrtTimestamp(end)}\n${noteText(note)}`;
   });
+  return blocks.length > 0 ? `${blocks.join('\n\n')}\n` : '';
+}
+
+/** Generic SRT builder for any `{start,end,text}` cue list -- Task 8's `get_transcript
+ * {format:'srt'}` reuses this rather than duplicating `toSrtTimestamp`'s formatting rules. */
+export function buildSrtString(cues: { start: number; end: number; text: string }[]): string {
+  const blocks = cues.map((cue, index) => `${index + 1}\n${toSrtTimestamp(cue.start)} --> ${toSrtTimestamp(cue.end)}\n${cue.text}`);
   return blocks.length > 0 ? `${blocks.join('\n\n')}\n` : '';
 }

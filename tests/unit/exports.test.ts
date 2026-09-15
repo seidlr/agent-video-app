@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EXPORT_FORMATS, secondsToEdlTimecode } from '../../src/lib/exports';
 import { exportVtt } from '../../src/lib/exports/vtt';
+import { buildSrtString } from '../../src/lib/exports/srt';
 import type { ExportContext } from '../../src/lib/exports/types';
 
 // Task 6 DoD fixture: "2 notes, 1 chapter, 1 box, fps 30".
@@ -76,6 +77,16 @@ describe('exportSrt', () => {
 
   it('returns an empty string when there are no notes', () => {
     expect(EXPORT_FORMATS.srt.generate({ ...CTX, notes: [] })).toBe('');
+  });
+});
+
+describe('buildSrtString (Task 8: get_transcript {format:"srt"} reuse)', () => {
+  it('numbers arbitrary {start,end,text} cues sequentially with comma-millisecond timestamps', () => {
+    expect(buildSrtString([{ start: 5, end: 8, text: 'hello world' }])).toBe('1\n00:00:05,000 --> 00:00:08,000\nhello world\n');
+  });
+
+  it('returns an empty string for no cues', () => {
+    expect(buildSrtString([])).toBe('');
   });
 });
 
