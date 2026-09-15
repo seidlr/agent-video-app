@@ -1,6 +1,15 @@
 import { getMlQueryOverrides, mlClient } from '../../ml/client';
 import { pickSegmentModel } from '../../ml/catalog';
 import { dilatePixelBox, getTracker, toGrayscale, trackFrames, type GrayFrame, type PixelBox } from '../../ml/tracker';
+import { dhash64, quantizeHist } from '../../media/dhash';
+import {
+  detectScenesFromHistograms,
+  ensureFrameSamples,
+  findSimilarRanges,
+  SAMPLE_HEIGHT,
+  SAMPLE_WIDTH,
+  type FrameSample,
+} from '../../media/scenes';
 import type { BoxSource } from '../../lib/types';
 import { parseTime, secsToTimecode } from '../../lib/time';
 import { getVideoElement } from '../../lib/videoElement';
@@ -242,4 +251,108 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
       };
     },
   });
+
+  registry.define<{ addChapters?: boolean; sensitivity?: number; minSceneDuration?: number }>({
+    name: 'detect_scenes',
+    description: 'Detects scene/shot boundaries via color histogram analysis. Optionally adds a chapter ("Scene N") per detected scene.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        addChapters: { type: 'boolean' },
+        sensitivity: { type: 'number', minimum: 0.01 },
+        minSceneDuration: { type: 'number', minimum: 0 },
+      },
+    },
+    group: 'vision',
+    when: 'local',
+    mode: 'job',
+    handler: async (args): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'scenes_unavailable_on_youtube', hint: 'Scene detection needs direct pixel access; not available for a YouTube source.' };
+      }
+
+      const samples = await ensureFrameSamples(state.source);
+      const scenes = detectScenesFromHistograms(samples, { sensitivity: args.sensitivity, minSceneDuration: args.minSceneDuration });
+
+      let chaptersAdded = 0;
+      if (args.addChapters) {
+        scenes.forEach((scene, index) => {
+          try {
+            store.getState().addChapter({ start: scene.start, end: scene.end, title: `Scene ${index + 1}` });
+            chaptersAdded++;
+          } catch {
+            // Overlaps an existing chapter -- skip it rather than fail the whole detection result.
+          }
+        });
+      }
+
+      return {
+        ok: true,
+        summary: `Detected ${scenes.length} scene(s)${chaptersAdded > 0 ? `, added ${chaptersAdded} chapter(s)` : ''}`,
+        scenes,
+      };
+    },
+  });
+
+  registry.define<{ frameId?: string; time?: string | number; maxDistance?: number; maxColorDistance?: number }>({
+    name: 'find_similar_frames',
+    description: 'Finds time ranges visually similar to a reference frame (by captured frameId or a timestamp), using a color-aware perceptual hash.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        frameId: { type: 'string' },
+        time: { type: ['string', 'number'] },
+        maxDistance: { type: 'number', minimum: 0 },
+        maxColorDistance: { type: 'number', minimum: 0 },
+      },
+    },
+    annotations: { readOnlyHint: true },
+    group: 'vision',
+    when: 'local',
+    mode: 'job',
+    handler: async (args): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'find_similar_frames_unavailable_on_youtube', hint: 'Needs direct pixel access; not available for a YouTube source.' };
+      }
+      if (args.frameId === undefined && args.time === undefined) {
+        return { ok: false, error: 'invalid_query', hint: 'Provide `frameId` (a captured frame) or `time`.' };
+      }
+
+      const samples = await ensureFrameSamples(state.source);
+      if (samples.length === 0) return { ok: false, error: 'no_samples', hint: 'Nothing could be sampled from this source.' };
+
+      let query: FrameSample;
+      if (args.frameId !== undefined) {
+        const frame = state.frames.find((f) => f.id === args.frameId);
+        if (!frame) return { ok: false, error: 'unknown_frame', hint: `no frame with id "${args.frameId}"` };
+        query = await hashFromImageUrl(frame.blobUrl);
+      } else {
+        const target = parseTime(args.time as string | number, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
+        if (target === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+        query = samples.reduce((best, s) => (Math.abs(s.time - target) < Math.abs(best.time - target) ? s : best), samples[0] as FrameSample);
+      }
+
+      const ranges = findSimilarRanges(samples, query, { maxDistance: args.maxDistance, maxColorDistance: args.maxColorDistance });
+      return { ok: true, summary: `${ranges.length} matching range(s)`, ranges };
+    },
+  });
+}
+
+/** Decodes an image URL (a Frames-tray blob URL) into a {@link FrameSample} at the same
+ * SAMPLE_WIDTH x SAMPLE_HEIGHT every video-decoded sample uses, so a captured frame can be
+ * compared apples-to-apples against the sampled grid in `find_similar_frames {frameId}`. */
+async function hashFromImageUrl(url: string): Promise<FrameSample> {
+  const blob = await fetch(url).then((r) => r.blob());
+  const bitmap = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(SAMPLE_WIDTH, SAMPLE_HEIGHT);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas_unavailable');
+  ctx.drawImage(bitmap, 0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
+  bitmap.close();
+  const { data } = ctx.getImageData(0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
+  return { time: -1, dhash: dhash64(data, SAMPLE_WIDTH, SAMPLE_HEIGHT), hist: quantizeHist(data, SAMPLE_WIDTH, SAMPLE_HEIGHT) };
 }
