@@ -51,6 +51,12 @@ export interface StorageState {
   persisted: boolean;
   usage: number;
   quota: number;
+  /** Set once by the MCP App's own boot-time probe (Task 11 Key Decisions) -- `true` for the main
+   * site (never probed, so assumed working, matching every existing best-effort persistence call
+   * site's own tolerance for a failed write). `false` only when `probeStorageWorks()` (a real
+   * `indexedDB.open`/`storage.getDirectory()` call, not just a `typeof` check) actually threw
+   * inside a sandboxed MCP App iframe. */
+  worksInThisContext: boolean;
 }
 
 /** One catalog model's live state, as `list_models`/the Models panel report it (Task 7's
@@ -268,7 +274,7 @@ export function createStudioStore() {
     activity: [],
     ui: { theme: 'system', panel: 'activity', layout: 'studio', agentTransport: 'none' },
     capabilities: detectCapabilities(),
-    storage: { persisted: false, usage: 0, quota: 0 },
+    storage: { persisted: false, usage: 0, quota: 0, worksInThisContext: true },
     models: {},
     boxDrawMode: false,
     poseLandmarks: null,

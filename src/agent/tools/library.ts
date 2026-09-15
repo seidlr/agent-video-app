@@ -4,6 +4,7 @@ import { loadSource } from '../../media/load';
 import { defaultSourceDeps } from '../../media/source';
 import { listLibraryAssets, readLibraryFile, removeLibraryAsset } from '../../store/library';
 import type { StudioStore } from '../../store/studio';
+import { isMcpAppContext } from '../mcpApp';
 import type { Registry, ToolResult } from '../registry';
 
 /** Agent-facing source names (`library`) intentionally differ from the internal AssetKind
@@ -53,6 +54,16 @@ export function defineLibraryTools(registry: Registry, store: StudioStore): void
     handler: async (args): Promise<ToolResult> => {
       const kind = SOURCE_TO_KIND[args.source];
       if (!kind) return { ok: false, error: 'invalid_source', hint: 'source must be one of sample|library|url|youtube' };
+      // MCP App mode (Key Decisions: "samples + URLs only; library returns a hint") -- a
+      // sandboxed MCP App iframe render has no pre-existing local-file library of its own (nothing
+      // was ever uploaded to that specific sandboxed storage instance, even when storage itself
+      // works), so a plain "asset not found" from readLibraryFile would be a confusing dead end.
+      // Checked here rather than threaded into resolveSource, whose thrown errors all get
+      // flattened into this handler's own generic `load_failed:` wrapper below, losing a
+      // dedicated, actionable hint.
+      if (args.source === 'library' && isMcpAppContext()) {
+        return { ok: false, error: 'library_unavailable_in_mcp_app', hint: 'An MCP App has no persistent local-file library of its own. Use source:"sample" or a CORS-enabled source:"url" instead.' };
+      }
       try {
         await loadSource(store.getState(), { kind, id: args.id, url: args.url });
         const source = store.getState().source;

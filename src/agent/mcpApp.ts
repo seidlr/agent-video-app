@@ -1,5 +1,6 @@
 import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from '@modelcontextprotocol/ext-apps';
 import type { McpUiHostContext } from '@modelcontextprotocol/ext-apps';
+import { probeStorageWorks } from '../lib/capabilities';
 import type { AgentTransport, StudioStore } from '../store/studio';
 import type { Registry } from './registry';
 
@@ -89,6 +90,13 @@ export async function mountMcpApp(registry: Registry, store: StudioStore): Promi
   await app.connect();
   const initialContext = app.getHostContext();
   if (initialContext) applyHostContext(initialContext);
+
+  // TS-009 step 7: "storage probe result logged". Best-effort and non-blocking -- the app renders
+  // and every tool still works (just non-persistently) if this comes back false.
+  void probeStorageWorks().then((worksInThisContext) => {
+    console.log(`[mcp-app] storage probe: ${worksInThisContext ? 'OPFS + IndexedDB both work' : 'unavailable in this host -- data will not persist across renders'}`);
+    store.getState().setStorageState({ worksInThisContext });
+  });
 
   store.getState().setAgentTransport('mcp-app');
   store.subscribe(() => scheduleContextUpdate());

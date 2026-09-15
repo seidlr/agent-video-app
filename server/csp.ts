@@ -32,8 +32,13 @@ export function connectDomains(): string[] {
   return [...catalogModelDomains(), ...HF_DOWNLOAD_CDN_DOMAINS, ...MEDIAPIPE_DOMAINS, ...VIDEO_SOURCE_DOMAINS];
 }
 
+/** `mcp-app.html`'s own `<link>` to Google Fonts' stylesheet (fonts.googleapis.com) plus the actual
+ * font files it references (fonts.gstatic.com, a different domain) -- both real resource fetches
+ * the MCP App's own head makes, same as the main site's `index.html`. */
+const FONT_DOMAINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
+
 export function resourceDomains(): string[] {
-  return [...connectDomains(), 'https://fonts.gstatic.com'];
+  return [...connectDomains(), ...FONT_DOMAINS];
 }
 
 export const FRAME_DOMAINS = ['https://www.youtube-nocookie.com'];

@@ -8,6 +8,12 @@ const opfsMock = vi.hoisted(() => ({
 }));
 vi.mock('../../src/store/opfs', () => opfsMock);
 
+// Real isMcpAppContext() reads window.location, unavailable under this file's Node environment --
+// mocked so a test can force the MCP-App branch of load_video's own library-source check
+// (Task 11) without needing a real (or jsdom-simulated) browser global.
+const mcpAppMock = vi.hoisted(() => ({ isMcpAppContext: vi.fn(() => false) }));
+vi.mock('../../src/agent/mcpApp', () => mcpAppMock);
+
 import { db } from '../../src/store/db';
 import { DEFAULT_PROJECT_ID } from '../../src/lib/types';
 import { importFile } from '../../src/store/library';
@@ -218,6 +224,31 @@ describe('session/library/playback tools', () => {
       const { registry } = setupRegistry();
       const result = await registry.call('load_video', { source: 'library', id: 'missing' });
       expect(result).toMatchObject({ ok: false, error: expect.stringContaining('load_failed') });
+    });
+
+    it('load_video rejects source:"library" inside an MCP App with a dedicated hint, without ever touching the store (Task 11)', async () => {
+      mcpAppMock.isMcpAppContext.mockReturnValue(true);
+      try {
+        const { registry, store } = setupRegistry();
+        const asset = await importFile(new File([new Uint8Array(8)], 'clip.mp4', { type: 'video/mp4' }), DEFAULT_PROJECT_ID);
+        const result = await registry.call('load_video', { source: 'library', id: asset.id });
+        expect(result).toEqual({ ok: false, error: 'library_unavailable_in_mcp_app', hint: expect.stringContaining('sample') });
+        expect(store.getState().source).toBeNull();
+      } finally {
+        mcpAppMock.isMcpAppContext.mockReturnValue(false);
+      }
+    });
+
+    it('load_video still loads a sample by id inside an MCP App -- only source:"library" is restricted (Task 11)', async () => {
+      mcpAppMock.isMcpAppContext.mockReturnValue(true);
+      try {
+        const { registry, store } = setupRegistry();
+        const result = await registry.call('load_video', { source: 'sample', id: 'sprite-fight' });
+        expect(result).toMatchObject({ ok: true, source: { kind: 'sample' } });
+        expect(store.getState().source?.kind).toBe('sample');
+      } finally {
+        mcpAppMock.isMcpAppContext.mockReturnValue(false);
+      }
     });
 
     it('remove_video deletes the asset', async () => {
