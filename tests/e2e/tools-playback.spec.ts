@@ -99,21 +99,24 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
   });
 
   test('loading a YouTube source narrows the tool set to its yt-safe subset; loading a file restores it, and ontoolchange fires both times', async ({ page }) => {
-    // Three sequential expect.poll calls below each allow up to 30s on a loaded CI runner; the
-    // default 30s test timeout isn't enough headroom for all three plus the rest of the test.
-    test.setTimeout(120_000);
+    // Three sequential expect.poll calls below each allow up to 60s on a loaded CI runner; the
+    // overall test timeout is bumped well past that to give all three (plus the rest of the test)
+    // room even in the worst case.
+    test.setTimeout(180_000);
     await page.goto('/');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
     // refreshSourceTools() (agent/webmcp.ts) runs off the store's own subscribe callback (fire-
     // and-forget, not awaited by load_video), so its registerTool() calls can still be in flight
-    // once load_video resolves -- poll rather than snapshot listToolNames() once. Explicit 30s
-    // timeout (well past Playwright's 5s default): each source-kind transition now unregisters/
-    // reregisters every `local`-tagged tool, and Task 8 more than doubled that set (detect_scenes,
-    // find_similar_frames, detect_objects, transcribe, find_speaker_turns, tag_audio_events on top
-    // of Task 7's segment/track), which can take noticeably longer on a loaded CI runner than
-    // locally -- 15s was no longer enough once Task 8's tools landed.
-    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
+    // once load_video resolves -- poll rather than snapshot listToolNames() once. This budget has
+    // already been bumped once before (15s -> 30s when Task 8's tools landed) and needed bumping
+    // again here (30s -> 60s): Task 9 added 7 more `local`/`always`-tagged tools (clips CRUD,
+    // export_video/export_gif/export_project) on top of Task 8's set, and a real CI run timed out
+    // at 30s despite `Promise.all`-parallelized registration (the Task 8 fix for this same
+    // symptom) -- the growing raw tool *count* itself, not sequential-vs-parallel registration, is
+    // now the bottleneck on a loaded/shared runner. Expect to keep bumping this as more tasks add
+    // more tools unless registration cost is addressed structurally.
+    await expect.poll(async () => listToolNames(page), { timeout: 60_000 }).toContain('step_frames');
 
     const toolchangeCount = await page.evaluate(async (id) => {
       let count = 0;
@@ -125,14 +128,14 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     }, 'jNQXAC9IVRw');
     expect(toolchangeCount).toBeGreaterThan(0);
 
-    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).not.toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 60_000 }).not.toContain('step_frames');
     // Every yt-unsafe local tool is gone, but every always tool is untouched.
     const withYoutube = await listToolNames(page);
     expect(withYoutube).toContain('get_state');
     expect(withYoutube).toContain('play');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
-    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 60_000 }).toContain('step_frames');
   });
 
   test('window.agentVideo (the scripting bridge) can call seek, and the call is logged to Activity with via:"bridge"', async ({ page }) => {
