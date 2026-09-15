@@ -111,6 +111,27 @@ export function VideoStage(): ReactElement {
   }
 
   /**
+   * A bare `playerRef.current?.play()` can reject with "media is not ready - wait for `can-play`
+   * event" if the click lands before the provider has buffered enough to play -- entirely
+   * possible on any real network, not just a test artifact (confirmed: this raced and failed
+   * intermittently, both in tests/e2e/player.spec.ts locally and, very likely, in CI, before this
+   * fix). `canPlayQueue.waitForFlush()` is vidstack's own primitive for exactly this: it resolves
+   * once the player can actually play, immediately if it already can. The catch is deliberate --
+   * an autoplay-policy rejection here just means the click didn't count as a user gesture in some
+   * edge case; there's nothing more to do about it.
+   */
+  async function handlePlayClick(): Promise<void> {
+    const player = playerRef.current;
+    if (!player) return;
+    try {
+      await player.canPlayQueue.waitForFlush();
+      await player.play();
+    } catch {
+      // Intentionally swallowed -- see the comment above.
+    }
+  }
+
+  /**
    * `,`/`.` frame-stepping while paused -- not one of vidstack's own MEDIA_KEY_SHORTCUTS
    * (confirmed: togglePaused/toggleMuted/toggleFullscreen/seekBackward(5s)/seekForward(5s)/
    * volume are built in, but there's no frame-step binding), so this is custom. Attached as a
@@ -176,7 +197,7 @@ export function VideoStage(): ReactElement {
         <FrameLabel chapter={activeChapter} index={activeIndex} />
         <FrameTitle title={activeChapter?.title ?? ''} hidden={!paused && hasPlayed} />
         <BoxOverlay />
-        <PlayOverlay hidden={hasPlayed} onPlay={() => void playerRef.current?.play()} />
+        <PlayOverlay hidden={hasPlayed} onPlay={() => void handlePlayClick()} />
         <Chrome playerRef={playerRef} containerRef={containerRef} />
       </div>
       {source.filmstripUrls && <Filmstrip urls={source.filmstripUrls} />}

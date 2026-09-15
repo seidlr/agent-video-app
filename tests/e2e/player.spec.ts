@@ -58,6 +58,16 @@ async function clickPlayOverlay(page: Page): Promise<void> {
 }
 
 test.describe('player sources (Task 3 DoD)', () => {
+  // Forwards page-console errors to Node stdout (visible in CI's own log, unlike browser console
+  // messages) -- diagnostic infra kept permanently after it was needed once to see a
+  // DEMUXER_ERROR that only reproduced on GitHub Actions' Linux runner, never locally.
+  test.beforeEach(({ page }) => {
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') console.log(`[browser console error] ${msg.text()}`);
+    });
+    page.on('pageerror', (err) => console.log(`[browser pageerror] ${err.message}`));
+  });
+
   test('sample source plays', async ({ page }) => {
     await page.goto('/');
     await openLibraryTab(page);

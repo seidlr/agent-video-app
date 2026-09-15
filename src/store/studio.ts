@@ -61,6 +61,13 @@ export interface PlayerHandle {
   pause(): void;
   addEventListener(type: string, listener: () => void, options?: { once?: boolean }): void;
   removeEventListener(type: string, listener: () => void): void;
+  /** vidstack's own readiness queue (MediaPlayerInstance.canPlayQueue): waitForFlush() resolves
+   * once the player can actually play, immediately if it already can. Optional and structural so
+   * test doubles that don't need it still satisfy this interface -- play()/togglePlay() below
+   * skip the wait when it's absent. Without it, calling play() before enough data has buffered
+   * rejects with "media is not ready", uncaught, and playback silently never starts; confirmed as
+   * a real (not just test-only) race in tests/e2e/player.spec.ts. */
+  canPlayQueue?: { waitForFlush(): Promise<void> };
 }
 
 export interface StudioState {
@@ -306,6 +313,7 @@ export function createStudioStore() {
       playerHandle = handle;
     },
     async play() {
+      await playerHandle?.canPlayQueue?.waitForFlush();
       await playerHandle?.play();
     },
     pause() {
@@ -313,8 +321,12 @@ export function createStudioStore() {
     },
     async togglePlay() {
       if (!playerHandle) return;
-      if (playerHandle.paused) await playerHandle.play();
-      else playerHandle.pause();
+      if (playerHandle.paused) {
+        await playerHandle.canPlayQueue?.waitForFlush();
+        await playerHandle.play();
+      } else {
+        playerHandle.pause();
+      }
     },
     async seek(time, opts) {
       const handle = playerHandle;

@@ -45,6 +45,35 @@ describe('studio store player actions', () => {
     expect(handle.pause).toHaveBeenCalledTimes(1);
   });
 
+  it('play() waits for canPlayQueue.waitForFlush() before calling play(), when the handle exposes one', async () => {
+    const store = createStudioStore();
+    const order: string[] = [];
+    const handle = createMockPlayer({
+      play: vi.fn(async () => {
+        order.push('play');
+      }),
+      canPlayQueue: {
+        waitForFlush: vi.fn(async () => {
+          order.push('waitForFlush');
+        }),
+      },
+    });
+    store.getState().registerPlayer(handle);
+
+    await store.getState().play();
+
+    expect(order).toEqual(['waitForFlush', 'play']);
+  });
+
+  it('play() works without a canPlayQueue on the handle (a plain test double, or a real player that lacks it)', async () => {
+    const store = createStudioStore();
+    const handle = createMockPlayer(); // no canPlayQueue
+    store.getState().registerPlayer(handle);
+
+    await expect(store.getState().play()).resolves.toBeUndefined();
+    expect(handle.play).toHaveBeenCalledTimes(1);
+  });
+
   it('togglePlay() plays when paused and pauses when playing', async () => {
     const store = createStudioStore();
     const handle = createMockPlayer({ paused: true });
