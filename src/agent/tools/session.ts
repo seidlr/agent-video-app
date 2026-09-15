@@ -1,6 +1,26 @@
+import skillMarkdown from '../../../skills/agent-video-studio/SKILL.md?raw';
 import { secsToTimecode } from '../../lib/time';
 import type { PanelId, StudioStore, ThemeSetting, UiState } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
+
+/** Strips SKILL.md's own frontmatter block before returning it to an agent -- the frontmatter is
+ * discovery/manifest metadata (name, description, license, ...) for `index.json`, not part of the
+ * skill's actual instructional content. */
+const SKILL_BODY = skillMarkdown.replace(/^---\n[\s\S]*?\n---\n/, '');
+
+/** Splits the skill body into `{heading, body}` sections at each level-2 (`## `) Markdown
+ * heading, so `get_agent_skill {section}` can return just one instead of the whole ~130-line
+ * document. Anything before the first `## ` heading (the title + intro paragraph) has no heading
+ * of its own and is grouped under the empty-string key, always included regardless of `section`. */
+function splitIntoSections(markdown: string): { heading: string; body: string }[] {
+  const parts = markdown.split(/^## /m);
+  const sections = [{ heading: '', body: parts[0]!.trimEnd() }];
+  for (const part of parts.slice(1)) {
+    const newlineIndex = part.indexOf('\n');
+    sections.push({ heading: part.slice(0, newlineIndex), body: `## ${part}`.trimEnd() });
+  }
+  return sections;
+}
 
 const VIEW_PANELS: PanelId[] = ['library', 'notes', 'frames', 'tracking', 'vision', 'transcript', 'clips', 'effects', 'models', 'activity', 'skill'];
 
@@ -69,19 +89,32 @@ export function defineSessionTools(registry: Registry, store: StudioStore): void
 
   registry.define<{ section?: string }>({
     name: 'get_agent_skill',
-    description: 'Returns the agent skill documentation describing how to use this app\'s tools.',
+    description:
+      'Returns the agent skill documentation (SKILL.md) describing how to use this app\'s tools -- workflows, the tool response envelope, the job protocol, model-download gating, and safety notes. Pass `section` (a heading, e.g. "Workflows") to get just that part instead of the whole document.',
     inputSchema: { type: 'object', properties: { section: { type: 'string' } } },
     annotations: { readOnlyHint: true },
     group: 'session',
     when: 'always',
-    // Task 10 replaces this with the real generated SKILL.md content (`?raw` import), sectioned
-    // by `section`. Kept minimal here so the tool exists and is discoverable before then.
-    handler: (): ToolResult => ({
-      ok: true,
-      summary: 'Agent Video Studio: an agent-first, front-end-only video player and editor.',
-      content:
-        'Call get_state first to see what is loaded. Use load_video to open a sample, a CORS-enabled URL, a YouTube link, or request_file_upload for a local file. Full documentation lands in a later task.',
-    }),
+    handler: (args): ToolResult => {
+      if (!args.section) {
+        return { ok: true, summary: 'Agent Video Studio skill documentation', content: SKILL_BODY };
+      }
+
+      const sections = splitIntoSections(SKILL_BODY);
+      const query = args.section.toLowerCase();
+      const match = sections.find((s) => s.heading.toLowerCase().includes(query));
+      if (!match) {
+        return {
+          ok: false,
+          error: 'unknown_section',
+          hint: `No section matches "${args.section}". Known sections: ${sections
+            .filter((s) => s.heading)
+            .map((s) => s.heading)
+            .join(', ')}`,
+        };
+      }
+      return { ok: true, summary: `Skill documentation: ${match.heading}`, content: match.body };
+    },
   });
 
   registry.define<{ jobId: string }>({

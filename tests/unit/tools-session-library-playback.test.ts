@@ -107,6 +107,36 @@ describe('session/library/playback tools', () => {
       expect((result as unknown as { content: string }).content.length).toBeGreaterThan(0);
     });
 
+    it('get_agent_skill strips the SKILL.md frontmatter block from the returned content', async () => {
+      const { registry } = setupRegistry();
+      const result = (await registry.call('get_agent_skill', {})) as unknown as { content: string };
+      expect(result.content.startsWith('---')).toBe(false);
+      expect(result.content).not.toContain('\nname: agent-video-studio\n');
+    });
+
+    it('get_agent_skill {section} returns just the matching heading\'s content', async () => {
+      const { registry } = setupRegistry();
+      const result = (await registry.call('get_agent_skill', { section: 'workflows' })) as unknown as { ok: true; content: string; summary: string };
+      expect(result.ok).toBe(true);
+      expect(result.content.startsWith('## ')).toBe(true);
+      expect(result.content.toLowerCase()).toContain('workflow');
+      expect(result.summary.toLowerCase()).toContain('workflow');
+    });
+
+    it('get_agent_skill {section} is case-insensitive and matches on substring', async () => {
+      const { registry } = setupRegistry();
+      const result = (await registry.call('get_agent_skill', { section: 'Workflows' })) as unknown as { content: string };
+      const lower = (await registry.call('get_agent_skill', { section: 'workflow' })) as unknown as { content: string };
+      expect(result.content).toBe(lower.content);
+    });
+
+    it('get_agent_skill {section} reports ok:false with known sections listed for a non-matching section', async () => {
+      const { registry } = setupRegistry();
+      const result = await registry.call('get_agent_skill', { section: 'no-such-heading-xyz' });
+      expect(result).toMatchObject({ ok: false, error: 'unknown_section' });
+      expect((result as unknown as { hint: string }).hint).toContain('no-such-heading-xyz');
+    });
+
     it('get_job/list_jobs/cancel_job wire through to registry.jobs', async () => {
       const { registry } = setupRegistry();
       const { jobId } = registry.jobs.start({
