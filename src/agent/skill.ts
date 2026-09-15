@@ -1,9 +1,12 @@
 import skillMarkdown from '../../skills/agent-video-studio/SKILL.md?raw';
 
+/** The literal file content, frontmatter included -- what the Skill panel's "Copy SKILL.md"
+ * button hands back, since that's meant to be a real, installable copy of the file. */
+export const SKILL_MARKDOWN = skillMarkdown;
+
 /** Strips SKILL.md's own frontmatter block -- the frontmatter is discovery/manifest metadata
  * (name, description, license, ...) for `index.json`, not part of the skill's instructional
- * content, so neither the `get_agent_skill` tool nor the Skill panel's "Copy SKILL.md" should
- * surface it. */
+ * content, and reads as noise when an agent asks `get_agent_skill` for how to use this app. */
 export const SKILL_BODY = skillMarkdown.replace(/^---\n[\s\S]*?\n---\n/, '');
 
 export interface SkillSection {

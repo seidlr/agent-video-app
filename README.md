@@ -36,6 +36,20 @@ npm run make-fixture
 
 Regenerates `tests/fixtures/cuts.mp4` (committed; CI does not regenerate it).
 
+## Connecting an agent
+
+Install the agent skill:
+
+```bash
+npx skills add https://seidlr.github.io/agent-video-app/skill.zip
+```
+
+See the in-app **Skill** panel for a downloadable zip, a copyable `SKILL.md`, and per-agent
+connection steps, or read [`docs/agents.md`](docs/agents.md) /
+[`skills/agent-video-studio/`](skills/agent-video-studio/) directly. Discovery metadata is served
+at [`/.well-known/agent-skills/index.json`](https://seidlr.github.io/agent-video-app/.well-known/agent-skills/index.json)
+and [`/llms.txt`](https://seidlr.github.io/agent-video-app/llms.txt).
+
 ## Full docs
 
-Full usage instructions, the agent host matrix, and the skill install command land in Task 14.
+Full usage instructions and remaining polish land in Task 14.

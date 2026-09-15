@@ -44,12 +44,21 @@ jobs:
         run: npx playwright install --with-deps chrome
 
       - name: End-to-end tests
-        # ML-tagged scenarios (segmentation/detection/transcription/VLM/effects) need a real
-        # GPU and are excluded here; run them locally with `npx playwright test --grep @ml`.
-        run: npx playwright test --grep-invert @ml
+        # ML-tagged scenarios (segmentation/detection/transcription/VLM/effects) need a real GPU
+        # and are excluded here; run them locally with `npx playwright test --grep @ml`.
+        # build-tagged scenarios (TS-008, tests/e2e/skill.spec.ts) need a production dist/ under
+        # its real base path, which doesn't exist yet at this point in the pipeline -- run after
+        # the Build step below instead.
+        run: npx playwright test --grep-invert "@ml|@build"
 
       - name: Build
         run: npm run build
+
+      - name: End-to-end tests (production build)
+        # TS-008: skill.zip / .well-known discovery / the Skill panel, all against the real
+        # dist/ output this workflow is about to deploy -- vite preview serves it under the same
+        # '/agent-video-app/' base GitHub Pages uses, which the dev server (base '/') can't.
+        run: npx playwright test --grep @build
 
       - uses: actions/upload-pages-artifact@v3
         with:

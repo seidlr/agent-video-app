@@ -1,0 +1,24 @@
+# Agent Video Studio
+
+> A front-end-only, local-storage video player and editor built for an *external* agent (Claude
+> Desktop, ChatGPT, Codex, Claude in Chrome) to drive through registered tools -- there is no chat
+> UI inside the app itself. Load a video (a bundled sample, a CORS-enabled URL, a YouTube link, or
+> a local file), then seek, capture frames, detect scenes, segment and track objects, transcribe
+> with search, cut clips, and export video/gif/notes, all with agent-driven timestamps. Every byte
+> stays in the browser (OPFS + IndexedDB); every ML model downloads only when a tool call
+> explicitly confirms it.
+
+- [Agent skill (SKILL.md)](https://seidlr.github.io/agent-video-app/.well-known/agent-skills/agent-video-studio/SKILL.md):
+  quick start, the tool response envelope, time-argument parsing, the job protocol,
+  model-download gating, workflows, and safety notes. Discovery index at
+  [/.well-known/agent-skills/index.json](https://seidlr.github.io/agent-video-app/.well-known/agent-skills/index.json);
+  full bundle at [/skill.zip](https://seidlr.github.io/agent-video-app/skill.zip).
+- [Tool reference (TOOLS.md)](https://seidlr.github.io/agent-video-app/.well-known/agent-skills/agent-video-studio/references/TOOLS.md):
+  every registered tool's name, arguments, and an example call + result, generated from the live
+  tool registry.
+- [Per-host connection guide](https://seidlr.github.io/agent-video-app/.well-known/agent-skills/agent-video-studio/references/HOSTS.md):
+  exact steps to connect from Chrome's native WebMCP, ChatGPT Desktop/Codex site tools, the MCP-B
+  extension, or Claude in Chrome's scripting bridge.
+- [Agent host status (docs/agents.md)](https://github.com/seidlr/agent-video-app/blob/main/docs/agents.md):
+  the same host matrix with current verification status and dates, including the Claude Desktop
+  MCP App and Codex CLI HTTP bus once they land.
