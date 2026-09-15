@@ -2,7 +2,21 @@ import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { parseTime, secsToTimecode } from '../../lib/time';
+import { exportVideoClips } from '../../media/export';
+import { getInput } from '../../media/input';
 import { useStudio } from '../../store/studio';
+
+/** Same Blob-download click as agent/tools/exports.ts's own triggerBlobDownload -- duplicated here
+ * rather than shared, matching every other panel's own copy of this exact pattern (Notes.tsx,
+ * Library.tsx's project export). */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 /**
  * Clips panel (Task 9, TS-007 step 1): add/list/reorder/delete clips. Same convention as
@@ -13,7 +27,9 @@ import { useStudio } from '../../store/studio';
  */
 export function Clips(): ReactElement {
   const clips = useStudio((s) => s.clips);
+  const boxes = useStudio((s) => s.boxes);
   const player = useStudio((s) => s.player);
+  const source = useStudio((s) => s.source);
   const seek = useStudio((s) => s.seek);
   const addClip = useStudio((s) => s.addClip);
   const removeClip = useStudio((s) => s.removeClip);
@@ -23,6 +39,12 @@ export function Clips(): ReactElement {
   const [end, setEnd] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const [format, setFormat] = useState<'mp4' | 'webm'>('mp4');
+  const [width, setWidth] = useState('');
+  const [burnOverlays, setBurnOverlays] = useState(false);
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const timeCtx = { currentTime: player.currentTime, duration: player.duration, fps: player.fps };
   const sorted = [...clips].sort((a, b) => a.order - b.order);
@@ -37,6 +59,29 @@ export function Clips(): ReactElement {
     setStart('');
     setEnd('');
     setName('');
+  }
+
+  async function handleExportAll(): Promise<void> {
+    if (!source || sorted.length === 0) return;
+    setExportMessage(null);
+    setExportProgress(0);
+    try {
+      const input = await getInput(source);
+      const result = await exportVideoClips(input, {
+        clips: sorted.map((c) => ({ start: c.start, end: c.end })),
+        width: width.trim() ? Number(width) : undefined,
+        format,
+        burnOverlays,
+        boxes,
+        onProgress: setExportProgress,
+      });
+      triggerBlobDownload(result.blob, `agent-video-studio-export.${format}`);
+      setExportMessage(`Exported ${sorted.length} clip(s), ${result.durationSeconds.toFixed(1)}s, ${result.width}x${result.height}.`);
+    } catch (err) {
+      setExportMessage(err instanceof Error ? `Export failed: ${err.message}` : 'Export failed.');
+    } finally {
+      setExportProgress(null);
+    }
   }
 
   function moveClip(index: number, direction: -1 | 1): void {
@@ -111,6 +156,43 @@ export function Clips(): ReactElement {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {sorted.length > 0 && (
+        <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+          <h3 className="text-[13px] font-semibold">Export all</h3>
+          <div className="flex gap-1.5">
+            <select
+              value={format}
+              onChange={(e) => setFormat(e.target.value as 'mp4' | 'webm')}
+              className="rounded border border-line bg-surface px-1.5 py-1 text-[11px]"
+              aria-label="Export format"
+            >
+              <option value="mp4">MP4</option>
+              <option value="webm">WebM</option>
+            </select>
+            <input
+              value={width}
+              onChange={(e) => setWidth(e.target.value)}
+              placeholder="width (px)"
+              className="w-24 rounded border border-line bg-surface px-1.5 py-1 font-mono text-[11px]"
+              aria-label="Export width"
+            />
+          </div>
+          <label className="flex items-center gap-1.5 text-[12px] text-ink-2">
+            <input type="checkbox" checked={burnOverlays} onChange={(e) => setBurnOverlays(e.target.checked)} />
+            Burn box overlays into the video
+          </label>
+          <button
+            type="button"
+            onClick={() => void handleExportAll()}
+            disabled={exportProgress !== null}
+            className="self-start rounded-token bg-ink px-2.5 py-1 text-[12px] font-medium text-surface disabled:opacity-50"
+          >
+            {exportProgress !== null ? `Exporting... ${Math.round(exportProgress * 100)}%` : 'Export all'}
+          </button>
+          {exportMessage && <p className="text-[11px] text-ink-3">{exportMessage}</p>}
         </div>
       )}
     </div>

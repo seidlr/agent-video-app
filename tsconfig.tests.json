@@ -13,5 +13,5 @@
     "types": ["node", "vite/client", "webmcp-types"],
     "noEmit": true
   },
-  "include": ["tests/**/*.ts"]
+  "include": ["tests/**/*.ts", "src/types/**/*.d.ts"]
 }

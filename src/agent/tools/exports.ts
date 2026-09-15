@@ -1,10 +1,21 @@
 import { EXPORT_FORMATS } from '../../lib/exports';
 import type { ExportFormatId } from '../../lib/exports';
 import { DEFAULT_PROJECT_ID } from '../../lib/types';
+import { parseTime } from '../../lib/time';
+import { exportVideoClips } from '../../media/export';
+import { exportGif } from '../../media/gif';
+import { getInput } from '../../media/input';
 import { buildProjectZip } from '../../media/project';
 import { db } from '../../store/db';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
+
+/** The fixed download base name TS-007 step 2 tests verbatim ("agent-video-studio-export.mp4"),
+ * reused for export_gif too for the same-convention reason `export_project` uses the source's own
+ * title instead: unlike a project zip (one per video, naturally named after it), a clip export is
+ * a new, separate artifact that may combine multiple clips or none of the original title's
+ * context, so a fixed product-name base is what the plan's own DoD expects here. */
+const EXPORT_BASENAME = 'agent-video-studio-export';
 
 /** `<a download>` click, no picker -- same pattern as tools/frames.ts's triggerDownload, but for
  * a plain-text Blob instead of an image one. */
@@ -130,6 +141,138 @@ export function defineExportsTools(registry: Registry, store: StudioStore): void
         bytes: zipBlob.size,
         downloadedAs,
       };
+    },
+  });
+
+  registry.define<{ clips: 'all' | string[]; format?: 'mp4' | 'webm'; width?: number; burnOverlays?: boolean; download?: boolean }>({
+    name: 'export_video',
+    description:
+      'Trims and concatenates clips (added via add_clip) into a single mp4/webm file, optionally burning box overlays into the video. First call may take a while for long clips -- this is a job-mode tool; poll with get_job if it does not finish inline.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        // The hand-rolled validator (agent/validate.ts) has no oneOf/anyOf, and combining `enum`
+        // with `items` on one dual-typed property breaks the array case (enum.includes() on an
+        // array value never matches by reference) -- so only the coarse string|array shape is
+        // schema-checked; the handler below rejects a string value that isn't literally "all".
+        clips: { type: ['string', 'array'], items: { type: 'string' } },
+        format: { type: 'string', enum: ['mp4', 'webm'] },
+        width: { type: 'number', minimum: 16 },
+        burnOverlays: { type: 'boolean' },
+        download: { type: 'boolean' },
+      },
+      required: ['clips'],
+    },
+    annotations: { consequentialHint: true },
+    group: 'export',
+    when: 'local',
+    mode: 'job',
+    handler: async (args, ctx): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'export_unavailable_on_youtube', hint: 'Needs direct pixel/byte access; not available for a YouTube source.' };
+      }
+      if (typeof args.clips === 'string' && args.clips !== 'all') {
+        return { ok: false, error: 'invalid_clips', hint: '`clips` must be "all" or an array of clip ids.' };
+      }
+
+      const sortedClips = [...state.clips].sort((a, b) => a.order - b.order);
+      const selected = args.clips === 'all' ? sortedClips : sortedClips.filter((c) => args.clips.includes(c.id));
+      if (selected.length === 0) return { ok: false, error: 'no_clips', hint: 'Add at least one clip with add_clip first.' };
+
+      try {
+        const input = await getInput(state.source);
+        const result = await exportVideoClips(input, {
+          clips: selected.map((c) => ({ start: c.start, end: c.end })),
+          width: args.width,
+          format: args.format,
+          burnOverlays: args.burnOverlays,
+          boxes: state.boxes,
+          onProgress: (fraction) => ctx.progress(fraction),
+        });
+
+        const filename = `${EXPORT_BASENAME}.${args.format === 'webm' ? 'webm' : 'mp4'}`;
+        let downloadedAs: string | undefined;
+        if (args.download !== false) {
+          triggerBlobDownload(result.blob, filename);
+          downloadedAs = filename;
+        }
+
+        return {
+          ok: true,
+          summary: `Exported ${selected.length} clip(s), ${result.durationSeconds.toFixed(1)}s, ${result.width}x${result.height}${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}`,
+          durationSeconds: result.durationSeconds,
+          width: result.width,
+          height: result.height,
+          codec: result.codec,
+          bytes: result.blob.size,
+          downloadedAs,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const [code] = message.split(':');
+        return { ok: false, error: code || 'export_failed', hint: message };
+      }
+    },
+  });
+
+  registry.define<{ start: string | number; end: string | number; width?: number; fps?: number; download?: boolean }>({
+    name: 'export_gif',
+    description: 'Exports a time range as a GIF (default 320px wide, 10fps). Capped at 300 frames -- fails with too_many_frames if the range/fps combination would exceed that.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        start: { type: ['string', 'number'] },
+        end: { type: ['string', 'number'] },
+        width: { type: 'number', minimum: 16 },
+        fps: { type: 'number', minimum: 1, maximum: 30 },
+        download: { type: 'boolean' },
+      },
+      required: ['start', 'end'],
+    },
+    group: 'export',
+    when: 'local',
+    mode: 'job',
+    handler: async (args, ctx): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'export_unavailable_on_youtube', hint: 'Needs direct pixel/byte access; not available for a YouTube source.' };
+      }
+
+      const timeCtx = { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps };
+      const start = parseTime(args.start, timeCtx);
+      if (start === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+      const end = parseTime(args.end, timeCtx);
+      if (end === null) return { ok: false, error: 'invalid_time', hint: '`end` must parse the same way as `start`.' };
+      if (end <= start) return { ok: false, error: 'invalid_range', hint: '`end` must be after `start`.' };
+
+      try {
+        const input = await getInput(state.source);
+        const result = await exportGif(input, { start, end, width: args.width, fps: args.fps, onProgress: (fraction) => ctx.progress(fraction) });
+
+        const filename = `${EXPORT_BASENAME}.gif`;
+        let downloadedAs: string | undefined;
+        if (args.download !== false) {
+          triggerBlobDownload(result.blob, filename);
+          downloadedAs = filename;
+        }
+
+        return {
+          ok: true,
+          summary: `Exported GIF (${result.frames} frame(s), ${result.width}x${result.height})${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}`,
+          frames: result.frames,
+          width: result.width,
+          height: result.height,
+          bytes: result.blob.size,
+          downloadedAs,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const [code] = message.split(':');
+        return { ok: false, error: code || 'export_failed', hint: message };
+      }
     },
   });
 }

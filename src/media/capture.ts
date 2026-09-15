@@ -30,15 +30,22 @@ export interface CaptureError {
 const ANNOTATE_COLOR = '#4fb3d9';
 
 /** Draws normalized [0,1] box coordinates onto a canvas already sized to the captured frame, so
- * a capture with `includeOverlays:true` visually matches what BoxOverlay.tsx renders live. */
+ * a capture with `includeOverlays:true` visually matches what BoxOverlay.tsx renders live.
+ * `lineWidth` defaults to 2 (capture_frame's own lossless-PNG convention); `media/export.ts`'s
+ * `burnOverlays` passes a much thicker value -- confirmed via a live debug export that a 2px line
+ * does not reliably survive H.264's 4:2:0 chroma subsampling (which averages color over 2x2
+ * blocks structurally, independent of bitrate/quantizer/hardware-vs-software encoding, all of
+ * which were tried and made no measurable difference) -- a lossy video frame needs a wider stroke
+ * for the reserved annotate color to still be detectable after decoding. */
 export function drawOverlays(
   ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
   boxes: Box[],
   canvasWidth: number,
   canvasHeight: number,
+  lineWidth = 2,
 ): void {
   ctx.strokeStyle = ANNOTATE_COLOR;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = lineWidth;
   for (const box of boxes) {
     ctx.strokeRect(box.x * canvasWidth, box.y * canvasHeight, box.w * canvasWidth, box.h * canvasHeight);
   }

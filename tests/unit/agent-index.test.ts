@@ -63,6 +63,8 @@ const EXPECTED_TOOL_NAMES = [
   'remove_clip',
   'reorder_clips',
   'export_project',
+  'export_video',
+  'export_gif',
 ];
 
 describe('createAgentRegistry (Task 4/5/6/7/8 DoD: registry.test.ts)', () => {
