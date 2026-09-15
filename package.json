@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite-node scripts/run-build-skill.ts && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --build --force",
     "lint": "eslint .",
@@ -48,6 +48,7 @@
     "typescript": "5.8.2",
     "typescript-eslint": "8.26.1",
     "vite": "6.2.0",
+    "vite-node": "3.0.9",
     "vite-plugin-singlefile": "2.1.0",
     "vitest": "3.0.9",
     "webmcp-types": "0.1.7"

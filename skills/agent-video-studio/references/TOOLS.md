@@ -599,7 +599,7 @@ Example call:
 
 **Group:** session · **When:** always
 
-Returns the agent skill documentation describing how to use this app's tools.
+Returns the agent skill documentation (SKILL.md) describing how to use this app's tools -- workflows, the tool response envelope, the job protocol, model-download gating, and safety notes. Pass `section` (a heading, e.g. "Workflows") to get just that part instead of the whole document.
 
 | Argument | Type | Required |
 |---|---|---|

@@ -8,6 +8,8 @@ import tailwindcss from '@tailwindcss/vite';
 // `base` only applies to the production build: GitHub Pages serves this repo at
 // /agent-video-app/, but the dev server (and Playwright, which navigates to "/") must stay at
 // the root or every absolute import and page.goto('/') breaks locally.
+// scripts/build-skill.ts's own SITE_BASE_PATH constant must be kept in sync with this string --
+// it prefixes index.json's discovery URLs the same way.
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/agent-video-app/' : '/',
   plugins: [react(), tailwindcss()],

@@ -11,10 +11,20 @@ import { createStudioStore } from '../src/store/studio';
 /**
  * Generates the skill package's own tool reference, copies the skill folder into the well-known
  * discovery location, zips it, and writes the discovery index -- run before `vite build` (see
- * `package.json`'s own `build` script). `import 'fake-indexeddb/auto'` first: `createAgentRegistry`
- * pulls in `store/db.ts`, which instantiates a real Dexie database at module load time; this is
- * the exact same "SSR-less" trick every unit test already uses (vitest.config.ts's own
- * `environment: 'node'`) to run the same tool-module graph outside a browser.
+ * `package.json`'s own `build` script, and `scripts/run-build-skill.ts`). `import
+ * 'fake-indexeddb/auto'` first: `createAgentRegistry` pulls in `store/db.ts`, which instantiates a
+ * real Dexie database at module load time; this is the exact same "SSR-less" trick every unit
+ * test already uses (vitest.config.ts's own `environment: 'node'`) to run the same tool-module
+ * graph outside a browser.
+ *
+ * `main()` is exported rather than self-invoked behind an `import.meta.url === process.argv[1]`
+ * guard: the tool-module graph also pulls in `agent/skill.ts`'s `SKILL.md?raw` import, a
+ * Vite-only convention that plain Node/tsx can't resolve (`ERR_UNKNOWN_FILE_EXTENSION` on
+ * `.md`), so this script needs `vite-node` (already a transitive dep via vitest) to actually run
+ * -- and vite-node's own CLI consumes the target path before it reaches `process.argv`, leaving
+ * no reliable "am I the entry point" signal to test. `scripts/run-build-skill.ts` calls `main()`
+ * unconditionally instead; `tests/unit/build-skill.test.ts` imports only the named pure functions
+ * below and never `main`, so it never runs this module's side effects.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +35,13 @@ const TOOLS_MD_PATH = path.join(SKILL_DIR, 'references', 'TOOLS.md');
 const PUBLIC_DISCOVERY_DIR = path.join(REPO_ROOT, 'public', '.well-known', 'agent-skills');
 const PUBLIC_SKILL_COPY_DIR = path.join(PUBLIC_DISCOVERY_DIR, 'agent-video-studio');
 const PUBLIC_ZIP_PATH = path.join(REPO_ROOT, 'public', 'skill.zip');
+
+/** Must match `vite.config.ts`'s own hardcoded `base` -- GitHub Pages serves this repo at a
+ * project subpath, not the domain root, so `index.json`'s own `url` fields need the same prefix
+ * or they resolve to the wrong place (`https://seidlr.github.io/skill.zip` instead of
+ * `https://seidlr.github.io/agent-video-app/skill.zip`) when an agent fetches them as absolute
+ * paths against the deployed origin. */
+const SITE_BASE_PATH = '/agent-video-app/';
 
 const SCHEMA_URL = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json';
 /** Per the Agent Skills naming spec (also enforced by the Cloudflare discovery RFC): 1-64 chars,
@@ -166,7 +183,7 @@ export interface DiscoveryIndex {
  * references/ in one request), per the Cloudflare discovery RFC's own index format. Pure: takes
  * already-computed digests rather than reading files itself, so a test can check its shape
  * against known inputs without needing a prior build to have run. */
-export function buildDiscoveryIndex(fm: Frontmatter, skillMdDigestHex: string, zipDigestHex: string): DiscoveryIndex {
+export function buildDiscoveryIndex(fm: Frontmatter, basePath: string, skillMdDigestHex: string, zipDigestHex: string): DiscoveryIndex {
   return {
     $schema: SCHEMA_URL,
     skills: [
@@ -174,21 +191,21 @@ export function buildDiscoveryIndex(fm: Frontmatter, skillMdDigestHex: string, z
         name: fm.name,
         type: 'skill-md',
         description: fm.description,
-        url: `/.well-known/agent-skills/${fm.name}/SKILL.md`,
+        url: `${basePath}.well-known/agent-skills/${fm.name}/SKILL.md`,
         digest: `sha256:${skillMdDigestHex}`,
       },
       {
         name: fm.name,
         type: 'archive',
         description: fm.description,
-        url: '/skill.zip',
+        url: `${basePath}skill.zip`,
         digest: `sha256:${zipDigestHex}`,
       },
     ],
   };
 }
 
-function main(): void {
+export function main(): void {
   // 1. Generate references/TOOLS.md from the live registry.
   const registry = createAgentRegistry(createStudioStore());
   writeFileSync(TOOLS_MD_PATH, buildToolsMarkdown(registry.list()));
@@ -218,14 +235,8 @@ function main(): void {
   // 5. Write the discovery index -- one skill-md entry (the raw file) and one archive entry.
   const skillMdDigest = sha256Hex(new Uint8Array(readFileSync(SKILL_MD_PATH)));
   const zipDigest = sha256Hex(zipBytes);
-  const index = buildDiscoveryIndex(frontmatter, skillMdDigest, zipDigest);
+  const index = buildDiscoveryIndex(frontmatter, SITE_BASE_PATH, skillMdDigest, zipDigest);
   mkdirSync(PUBLIC_DISCOVERY_DIR, { recursive: true });
   writeFileSync(path.join(PUBLIC_DISCOVERY_DIR, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
   console.log(`Wrote ${path.relative(REPO_ROOT, path.join(PUBLIC_DISCOVERY_DIR, 'index.json'))}`);
-}
-
-// Only run when executed directly (`tsx scripts/build-skill.ts` / `npm run build`), not when
-// tests/unit/build-skill.test.ts imports the pure functions below.
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
 }

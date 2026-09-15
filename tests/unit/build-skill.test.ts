@@ -76,11 +76,25 @@ describe('build-skill.ts DoD: index.json digest matches SKILL.md; zip root conta
     const zipBytes = zipDirectory(SKILL_DIR);
     const fm = parseFrontmatter(readFileSync(SKILL_MD_PATH, 'utf-8'));
 
-    const index = buildDiscoveryIndex(fm, sha256Hex(skillMdBytes), sha256Hex(zipBytes));
+    const index = buildDiscoveryIndex(fm, '/agent-video-app/', sha256Hex(skillMdBytes), sha256Hex(zipBytes));
     const skillMdEntry = index.skills.find((s) => s.type === 'skill-md');
 
     expect(skillMdEntry).toBeDefined();
     expect(skillMdEntry!.digest).toBe(`sha256:${sha256Hex(skillMdBytes)}`);
+  });
+
+  // Regression: GitHub Pages serves this site from a project subpath (/agent-video-app/), not the
+  // domain root. index.json's own `url` fields must carry that prefix -- an agent resolving them
+  // as absolute paths against https://seidlr.github.io would otherwise 404 (e.g. hitting
+  // https://seidlr.github.io/skill.zip instead of https://seidlr.github.io/agent-video-app/skill.zip).
+  it('buildDiscoveryIndex prefixes every url with the given base path', () => {
+    const fm = parseFrontmatter(readFileSync(SKILL_MD_PATH, 'utf-8'));
+    const index = buildDiscoveryIndex(fm, '/agent-video-app/', 'aaaa', 'bbbb');
+
+    const skillMdEntry = index.skills.find((s) => s.type === 'skill-md')!;
+    const archiveEntry = index.skills.find((s) => s.type === 'archive')!;
+    expect(skillMdEntry.url).toBe('/agent-video-app/.well-known/agent-skills/agent-video-studio/SKILL.md');
+    expect(archiveEntry.url).toBe('/agent-video-app/skill.zip');
   });
 
   it('zipDirectory(skills/agent-video-studio/) contains SKILL.md at its root', () => {
