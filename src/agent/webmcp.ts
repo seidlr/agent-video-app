@@ -60,10 +60,16 @@ export async function mountWebMcp(registry: Registry, store: StudioStore): Promi
   const modelContext = document.modelContext;
   if (!modelContext) return 'none';
 
+  // Registered in parallel (Promise.all), not sequentially -- each tool is an independent
+  // registerTool() call with no ordering dependency on the others, and every tool group here has
+  // grown large enough (Task 8 alone adds 8 more) that awaiting them one at a time inside a
+  // for-loop made the whole batch's wall-clock cost scale linearly with the tool count. That
+  // pushed tests/e2e/tools-playback.spec.ts's YouTube-narrowing poll past even a 30s timeout on a
+  // loaded CI runner once Task 8's tools landed -- confirmed by the CI failure, not just reasoning.
   const alwaysController = new AbortController();
-  for (const tool of registry.list({ when: ['always'] })) {
-    await registerToolLoosely(modelContext, toWebMcpTool(tool, registry), { signal: alwaysController.signal });
-  }
+  await Promise.all(
+    registry.list({ when: ['always'] }).map((tool) => registerToolLoosely(modelContext, toWebMcpTool(tool, registry), { signal: alwaysController.signal })),
+  );
 
   // Separate abort-controller lifecycles for the source-driven ('local'/'yt') batch and the
   // transcript-driven ('after-transcribe') batch. They must NOT share one controller: a job-mode
@@ -76,23 +82,24 @@ export async function mountWebMcp(registry: Registry, store: StudioStore): Promi
   let sourceController: AbortController | null = null;
   async function refreshSourceTools(): Promise<void> {
     sourceController?.abort();
-    sourceController = new AbortController();
+    const controller = new AbortController();
+    sourceController = controller;
     const whens = currentLocalWhens(store.getState().source?.kind);
     if (whens.length === 0) return;
-    for (const tool of registry.list({ when: whens })) {
-      // Non-null: this closure only ever runs after the early `!modelContext` return above.
-      await registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: sourceController.signal });
-    }
+    // Non-null modelContext: this closure only ever runs after the early `!modelContext` return
+    // above.
+    await Promise.all(registry.list({ when: whens }).map((tool) => registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: controller.signal })));
   }
 
   let transcriptController: AbortController | null = null;
   async function refreshTranscriptTools(): Promise<void> {
     transcriptController?.abort();
-    transcriptController = new AbortController();
+    const controller = new AbortController();
+    transcriptController = controller;
     if (store.getState().transcript.segments.length === 0) return;
-    for (const tool of registry.list({ when: ['after-transcribe'] })) {
-      await registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: transcriptController.signal });
-    }
+    await Promise.all(
+      registry.list({ when: ['after-transcribe'] }).map((tool) => registerToolLoosely(modelContext!, toWebMcpTool(tool, registry), { signal: controller.signal })),
+    );
   }
 
   await refreshSourceTools();
