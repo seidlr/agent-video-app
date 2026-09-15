@@ -286,6 +286,9 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
 
       const samples = await ensureFrameSamples(state.source);
       const scenes = detectScenesFromHistograms(samples, { sensitivity: args.sensitivity, minSceneDuration: args.minSceneDuration });
+      // Populate the timeline's scene-boundary ticks (Markers.tsx) regardless of addChapters, so a
+      // caller can preview detected boundaries before deciding whether to commit them as chapters.
+      store.getState().setScenes(scenes);
 
       let chaptersAdded = 0;
       if (args.addChapters) {
@@ -405,7 +408,11 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
       // CLIP relevance threshold) filtered out every result, including correct ones.
       const ranges = findTopRanges(indexed.samples, queryVector, { minScore: args.minScore ?? 0.08 });
       const topK = args.topK ?? 5;
-      return { ok: true, summary: `${Math.min(ranges.length, topK)} matching range(s)`, ranges: ranges.slice(0, topK) };
+      const topRanges = ranges.slice(0, topK);
+      // Feeds the Vision panel's click-to-seek hit list (Task 8's own Key Decisions: "Search
+      // results render in the Vision panel with click-to-seek"), independent of the caller.
+      store.getState().setVisionSearch({ query: args.query, ranges: topRanges });
+      return { ok: true, summary: `${Math.min(ranges.length, topK)} matching range(s)`, ranges: topRanges };
     },
   });
 

@@ -1,10 +1,14 @@
 import type { ReactElement } from 'react';
 import type { Box, Chapter, Note } from '../../lib/types';
+import type { Scene } from '../../media/scenes';
 
 export interface MarkersProps {
   chapters: Chapter[];
   notes: Note[];
   boxes: Box[];
+  /** `detect_scenes`'s own most recent result (Task 8), independent of `chapters` -- rendered as
+   * a thin boundary tick even when the caller didn't pass `addChapters:true`. */
+  scenes: Scene[];
   duration: number;
   onSeek: (time: number) => void;
 }
@@ -23,7 +27,7 @@ export interface MarkersProps {
  * would otherwise sit *under* the Thumb and silently eat every click meant for the marker
  * (confirmed empirically: a real click on a visible, enabled marker button never registered).
  */
-export function Markers({ chapters, notes, boxes, duration, onSeek }: MarkersProps): ReactElement {
+export function Markers({ chapters, notes, boxes, scenes, duration, onSeek }: MarkersProps): ReactElement {
   const effectiveDuration = duration > 0 ? duration : 1;
   const pct = (t: number): string => `${(t / effectiveDuration) * 100}%`;
 
@@ -34,6 +38,16 @@ export function Markers({ chapters, notes, boxes, duration, onSeek }: MarkersPro
     .sort((a, b) => a.start - b.start);
   const sortedBoxes = [...boxes].sort((a, b) => a.time - b.time);
   const sortedChapters = [...chapters].sort((a, b) => a.start - b.start);
+  // A "boundary" is a transition between two detected scenes, i.e. every scene's start except the
+  // first (which is just the start of the video, not a cut) -- deduplicated against committed
+  // chapter starts so a `detect_scenes {addChapters:true}` result doesn't draw two overlapping
+  // ticks for the same instant.
+  const chapterStarts = new Set(sortedChapters.map((c) => c.start));
+  const sceneBoundaries = [...scenes]
+    .sort((a, b) => a.start - b.start)
+    .slice(1)
+    .map((s) => s.start)
+    .filter((t) => !chapterStarts.has(t));
 
   return (
     <>
@@ -48,6 +62,21 @@ export function Markers({ chapters, notes, boxes, duration, onSeek }: MarkersPro
               style={{ left: pct(c.start) }}
               title={`Chapter "${c.title}" at ${c.start.toFixed(2)}s`}
               aria-label={`Seek to chapter ${c.title}`}
+            />
+          ))}
+        </div>
+      )}
+      {sceneBoundaries.length > 0 && (
+        <div className="relative z-30 mb-0.5 h-1.5 pointer-events-none" data-testid="scene-boundaries">
+          {sceneBoundaries.map((t) => (
+            <button
+              key={`scene-${t}`}
+              type="button"
+              onClick={() => onSeek(t)}
+              className="absolute top-0 h-1.5 w-px -translate-x-1/2 bg-clay/50 pointer-events-auto"
+              style={{ left: pct(t) }}
+              title={`Detected scene boundary at ${t.toFixed(2)}s`}
+              aria-label={`Seek to detected scene boundary at ${t.toFixed(2)}s`}
             />
           ))}
         </div>

@@ -25,6 +25,8 @@ describe('createStudioStore', () => {
     expect(s.notes).toEqual([]);
     expect(s.chapters).toEqual([]);
     expect(s.transcript).toEqual({ segments: [], lang: null });
+    expect(s.scenes).toEqual([]);
+    expect(s.visionSearch).toBeNull();
     expect(s.clips).toEqual([]);
     expect(s.activity).toEqual([]);
     expect(s.ui.theme).toBe('system');
@@ -172,6 +174,24 @@ describe('createStudioStore', () => {
     store.getState().setModelState('slimsam', { progress: 0.5 });
     expect(store.getState().models.slimsam).toEqual({ cached: false, loaded: false, progress: 0.5 });
     expect(store.getState().models.edgetam).toEqual({ cached: true, loaded: true, progress: 1 });
+  });
+
+  it('setScenes replaces the last detect_scenes result wholesale', () => {
+    const store = createStudioStore();
+    store.getState().setScenes([{ start: 0, end: 2 }, { start: 2, end: 4 }]);
+    expect(store.getState().scenes).toEqual([{ start: 0, end: 2 }, { start: 2, end: 4 }]);
+
+    store.getState().setScenes([{ start: 0, end: 8 }]);
+    expect(store.getState().scenes).toEqual([{ start: 0, end: 8 }]);
+  });
+
+  it('setVisionSearch replaces the last search_frames result wholesale', () => {
+    const store = createStudioStore();
+    store.getState().setVisionSearch({ query: 'a red image', ranges: [{ start: 0, end: 2, score: 0.15 }] });
+    expect(store.getState().visionSearch).toEqual({ query: 'a red image', ranges: [{ start: 0, end: 2, score: 0.15 }] });
+
+    store.getState().setVisionSearch(null);
+    expect(store.getState().visionSearch).toBeNull();
   });
 
   it('pushActivity keeps at most 200 entries, dropping the oldest', () => {

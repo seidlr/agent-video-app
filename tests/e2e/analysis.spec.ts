@@ -63,6 +63,21 @@ test.describe('vision tools: detect_scenes/find_similar_frames', () => {
     expect((chapters.chapters as unknown[]).length).toBe(4);
   });
 
+  test('detect_scenes without addChapters renders scene-boundary ticks on the timeline without creating chapters (DoD: timeline scene ticks)', async ({ page }) => {
+    test.setTimeout(60_000);
+    await loadFixtureAndWaitReady(page);
+
+    const result = await execTool(page, 'detect_scenes', { waitSeconds: 40 });
+    expect(result.ok).toBe(true);
+    expect((result.scenes as unknown[]).length).toBe(4);
+
+    const chapters = await execTool(page, 'list_chapters');
+    expect((chapters.chapters as unknown[]).length).toBe(0);
+
+    // 4 scenes -> 3 internal boundaries (every scene start except the first, which is just t=0).
+    await expect(page.locator('[data-testid="scene-boundaries"] button')).toHaveCount(3);
+  });
+
   test('find_similar_frames at 1s returns only scene-1 (red) ranges (DoD: color rejects the other solid scenes)', async ({ page }) => {
     test.setTimeout(60_000);
     await loadFixtureAndWaitReady(page);
@@ -104,6 +119,11 @@ test.describe('transcript tools: transcribe/get_transcript/search_transcript @ml
     const searchHits = hits.hits as { start: number; end: number; text: string }[];
     expect(searchHits.length).toBeGreaterThanOrEqual(1);
     expect(searchHits[0]!.text.toLowerCase()).toContain('fox');
+
+    // TS-006 step 3 (DoD): "Transcript panel fills" -- switch to it and check a real segment row
+    // (not just the tool's own JSON return) shows the recognized text.
+    await page.locator('button', { hasText: 'Transcript' }).click();
+    await expect(page.getByText(/fox/i).first()).toBeVisible();
   });
 
   test('get_transcript returns text/srt/vtt formats derived from the same segments', async ({ page }) => {
@@ -239,6 +259,13 @@ test.describe('vision tools: search_frames/find_similar_frames method:dino @ml',
     expect(ranges.length).toBeGreaterThanOrEqual(1);
     expect(ranges[0]!.start).toBeGreaterThanOrEqual(5.5);
     expect(ranges[0]!.end).toBeLessThanOrEqual(8);
+
+    // TS-006 step 8 (DoD): "the Vision panel lists the hits with thumbnails" -- thumbnails are
+    // out of scope here (search_frames never populates the plan's own optional `thumbFrameId`;
+    // see the Deviations entry), but the ranked hit list itself must render with the query.
+    await page.locator('button', { hasText: 'Vision' }).click();
+    await expect(page.getByText('"yellow"')).toBeVisible();
+    await expect(page.locator('button', { hasText: '%' }).first()).toBeVisible();
   });
 
   test('find_similar_frames {method:"dino", time:1} returns only scene-1 ranges (DoD)', async ({ page }) => {

@@ -3,6 +3,7 @@ import { useStore } from 'zustand/react';
 import { detectCapabilities, type Capabilities } from '../lib/capabilities';
 import type { Box, CapturedFrame, Chapter, Clip, Note, ToolCall, Track, TranscriptSegment } from '../lib/types';
 import type { ResolvedSource } from '../media/source';
+import type { Scene } from '../media/scenes';
 
 /** A captured frame plus its in-session display URL (an object URL over the same bytes stored in
  * Dexie's `frames` table -- see src/agent/tools/frames.ts). Not persisted itself; re-created from
@@ -94,6 +95,14 @@ export interface StudioState {
   tracks: Track[];
   notes: Note[];
   chapters: Chapter[];
+  /** The most recent `detect_scenes` result (Task 8), independent of `chapters` -- populated on
+   * every call regardless of `addChapters`, so Markers.tsx can show scene boundaries the moment
+   * they're detected even when the agent didn't choose to commit them as chapters. */
+  scenes: Scene[];
+  /** The most recent `search_frames` result (Task 8), for the Vision panel's click-to-seek hit
+   * list -- `null` before any search has run this session. Replaced wholesale by each new search;
+   * not persisted across a reload (same convention as `scenes`). */
+  visionSearch: { query: string; ranges: { start: number; end: number; score: number }[] } | null;
   transcript: { segments: TranscriptSegment[]; lang: string | null };
   clips: Clip[];
   activity: ToolCall[];
@@ -142,6 +151,11 @@ export interface StudioState {
   addChapter(input: Omit<Chapter, 'id'>): string;
   updateChapter(id: string, patch: Partial<Chapter>): void;
   removeChapter(id: string): void;
+
+  /** Replaces the whole `scenes` slice (`detect_scenes`'s own result, Task 8). */
+  setScenes(scenes: Scene[]): void;
+  /** Replaces the whole `visionSearch` slice (`search_frames`'s own result, Task 8). */
+  setVisionSearch(result: StudioState['visionSearch']): void;
 
   addBox(input: Omit<Box, 'id'>): string;
   updateBox(id: string, patch: Partial<Box>): void;
@@ -232,6 +246,8 @@ export function createStudioStore() {
     tracks: [],
     notes: [],
     chapters: [],
+    scenes: [],
+    visionSearch: null,
     transcript: { segments: [], lang: null },
     clips: [],
     activity: [],
@@ -321,6 +337,13 @@ export function createStudioStore() {
     },
     removeChapter(id) {
       set((s) => ({ chapters: s.chapters.filter((c) => c.id !== id) }));
+    },
+
+    setScenes(scenes) {
+      set({ scenes });
+    },
+    setVisionSearch(result) {
+      set({ visionSearch: result });
     },
 
     addBox(input) {

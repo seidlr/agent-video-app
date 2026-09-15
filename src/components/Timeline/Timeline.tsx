@@ -16,6 +16,7 @@ export function Timeline(): ReactElement {
   const chapters = useStudio((s) => s.chapters);
   const notes = useStudio((s) => s.notes);
   const boxes = useStudio((s) => s.boxes);
+  const scenes = useStudio((s) => s.scenes);
   const source = useStudio((s) => s.source);
   const seek = useStudio((s) => s.seek);
 
@@ -42,7 +43,7 @@ export function Timeline(): ReactElement {
       {/* TimeSlider.Root seeks the underlying media element itself on drag/click; the store's
           currentTime snapshot follows via VideoStage's onTimeUpdate, so no extra handler here. */}
       <TimeSlider.Root className="group relative flex w-full cursor-pointer touch-none flex-col pt-3 pb-1.5 outline-none select-none">
-        <Markers chapters={chapters} notes={notes} boxes={boxes} duration={duration} onSeek={(t) => void seek(t)} />
+        <Markers chapters={chapters} notes={notes} boxes={boxes} scenes={scenes} duration={duration} onSeek={(t) => void seek(t)} />
 
         <div className="relative h-1">
           {chapters.length > 0 ? (
@@ -96,6 +97,12 @@ export function Timeline(): ReactElement {
             <span className="inline-block h-2 w-2 rounded-sm bg-clay" />
             Chapters · {chapters.length}
           </span>
+          {scenes.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm bg-clay/50" />
+              Scenes · {scenes.length}
+            </span>
+          )}
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-2 w-2 rounded-sm bg-ink-3" />
             Notes · {notes.length}
