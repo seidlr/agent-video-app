@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { CommandBus } from './bus.js';
+import { longPollCommands, type CommandBus } from './bus.js';
 
 /**
  * The plain REST half of the command bus (Task 11), for a UI-less MCP client like Codex CLI: its
@@ -29,22 +29,31 @@ export function createBusRouter(bus: CommandBus, sessionId: string): Router {
     res.json({ ok: true });
   });
 
-  router.post('/bus/poll', (req, res) => {
+  router.post('/bus/poll', async (req, res) => {
     const { instanceId } = req.body as { instanceId?: string };
     if (!instanceId) {
       res.status(400).json({ ok: false, error: 'missing_instance_id' });
       return;
     }
-    res.json(bus.pollCommands(sessionId, instanceId));
+    // Same real long-poll (up to ~10s) as the poll_commands MCP tool -- see longPollCommands's own
+    // doc comment on why this is shared rather than a plain non-blocking pollCommands() call.
+    res.json(await longPollCommands(bus, sessionId, instanceId));
   });
 
   router.post('/bus/result', (req, res) => {
-    const { instanceId, cmdId, result } = req.body as { instanceId?: string; cmdId?: string; result?: Record<string, unknown> };
+    const { instanceId, cmdId, result, imageBase64, mimeType } = req.body as {
+      instanceId?: string;
+      cmdId?: string;
+      result?: Record<string, unknown>;
+      imageBase64?: string;
+      mimeType?: string;
+    };
     if (!instanceId || !cmdId || !result) {
       res.status(400).json({ ok: false, error: 'missing_fields' });
       return;
     }
-    bus.postResult(sessionId, instanceId, cmdId, result);
+    const image = imageBase64 ? { base64: imageBase64, mimeType: mimeType ?? 'image/png' } : undefined;
+    bus.postResult(sessionId, instanceId, cmdId, result, image);
     res.json({ ok: true });
   });
 

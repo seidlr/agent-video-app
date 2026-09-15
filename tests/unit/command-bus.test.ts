@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createCommandBus } from '../../server/bus';
+import { createCommandBus, longPollCommands } from '../../server/bus';
 
 // Real, tiny durations (not fake timers) -- exercises the exact same setTimeout-based race in
 // dispatch() that production uses (15s/25s/10min), just fast enough for a test suite.
@@ -133,5 +133,36 @@ describe('command bus (Task 11)', () => {
 
     const job = bus.getJob('s1', cmdId);
     expect(job.result).toMatchObject({ image: { base64: 'ZmFrZS1wbmc=', mimeType: 'image/png' } });
+  });
+
+  describe('longPollCommands (shared by poll_commands and /bus/poll)', () => {
+    it('returns as soon as a command is dispatched, without waiting for the full timeout', async () => {
+      const bus = createCommandBus(FAST_OPTS);
+      bus.registerInstance('s1', 'inst-a');
+      void bus.dispatch('s1', { name: 'seek', args: {} });
+
+      const started = Date.now();
+      const polled = await longPollCommands(bus, 's1', 'inst-a', 5000, 20);
+      expect(Date.now() - started).toBeLessThan(200);
+      expect(polled).toMatchObject({ command: { name: 'seek' } });
+    });
+
+    it('returns {command:null} after the timeout when nothing is ever dispatched', async () => {
+      const bus = createCommandBus(FAST_OPTS);
+      bus.registerInstance('s1', 'inst-a');
+      const polled = await longPollCommands(bus, 's1', 'inst-a', 60, 20);
+      expect(polled).toEqual({ command: null });
+    });
+
+    it('returns {retired:true} immediately for an instance that is not the active one', async () => {
+      const bus = createCommandBus(FAST_OPTS);
+      bus.registerInstance('s1', 'inst-a');
+      bus.registerInstance('s1', 'inst-b'); // retires inst-a
+
+      const started = Date.now();
+      const polled = await longPollCommands(bus, 's1', 'inst-a', 5000, 20);
+      expect(Date.now() - started).toBeLessThan(200);
+      expect(polled).toEqual({ retired: true });
+    });
   });
 });

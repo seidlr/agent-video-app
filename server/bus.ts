@@ -241,3 +241,27 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
 
   return { registerInstance, activateInstance, retireInstance, pollCommands, postResult, dispatch, getJob };
 }
+
+const DEFAULT_LONG_POLL_TIMEOUT_MS = 10_000;
+const DEFAULT_LONG_POLL_INTERVAL_MS = 200;
+
+/** Turns `pollCommands`'s own non-blocking "what's ready right now" into a real long-poll: waits
+ * up to `timeoutMs` (default 10s) for a command or a `retired` state, checking every
+ * `intervalMs`. Shared by `server/index.ts`'s `poll_commands` MCP tool and
+ * `server/bus-http.ts`'s `/bus/poll` REST route -- both offer the exact same wait semantics to
+ * whichever transport the UI happens to be using. */
+export async function longPollCommands(
+  bus: CommandBus,
+  sessionId: string,
+  instanceId: string,
+  timeoutMs = DEFAULT_LONG_POLL_TIMEOUT_MS,
+  intervalMs = DEFAULT_LONG_POLL_INTERVAL_MS,
+): Promise<ReturnType<CommandBus['pollCommands']>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const polled = bus.pollCommands(sessionId, instanceId);
+    if (polled.retired || polled.command) return polled;
+    if (Date.now() >= deadline) return { command: null };
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}

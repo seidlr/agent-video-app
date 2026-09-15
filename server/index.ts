@@ -6,7 +6,7 @@ import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@model
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { ManifestTool } from '../src/agent/registry.js';
-import type { CommandBus, DispatchResult } from './bus.js';
+import { longPollCommands, type CommandBus, type DispatchResult } from './bus.js';
 import { connectDomains, FRAME_DOMAINS, resourceDomains } from './csp.js';
 import manifestData from './generated/tool-manifest.json' with { type: 'json' };
 import { jsonSchemaAsStandardSchema } from './schema.js';
@@ -16,12 +16,6 @@ const manifest = manifestData as ManifestTool[];
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_MCP_APP_HTML_PATH = path.join(__dirname, '..', 'dist', 'mcp-app.html');
 const RESOURCE_URI = 'ui://agent-video-studio/app.html';
-const POLL_TIMEOUT_MS = 10_000;
-const POLL_INTERVAL_MS = 200;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /** `image` (posted separately from `result` -- see `bus.ts`'s own `ImagePayload` doc comment) becomes
  * a real MCP `image` content block alongside the JSON text block, rather than a giant base64
@@ -144,13 +138,8 @@ export function createServer(busSessionId: string, bus: CommandBus, options: Cre
       _meta: { ui: { visibility: ['app'] } },
     },
     async (args: { instanceId: string }): Promise<CallToolResult> => {
-      const deadline = Date.now() + POLL_TIMEOUT_MS;
-      for (;;) {
-        const polled = bus.pollCommands(busSessionId, args.instanceId);
-        if (polled.retired || polled.command) return toCallToolResult(polled as unknown as Record<string, unknown>);
-        if (Date.now() >= deadline) return toCallToolResult({ command: null });
-        await sleep(POLL_INTERVAL_MS);
-      }
+      const polled = await longPollCommands(bus, busSessionId, args.instanceId);
+      return toCallToolResult(polled as unknown as Record<string, unknown>);
     },
   );
 
