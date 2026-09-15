@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent, ReactElement } from 'react';
-import { Trash2, Upload } from 'lucide-react';
+import { FolderInput, Trash2, Upload } from 'lucide-react';
 import { secsToTimecode } from '../../lib/time';
 import { DEFAULT_PROJECT_ID } from '../../lib/types';
 import type { Asset } from '../../lib/types';
 import { loadSource } from '../../media/load';
+import { applyImportedProject, parseProjectZip } from '../../media/project';
 import type { SampleCatalogEntry } from '../../media/source';
 import { readStorageEstimate } from '../../store/persist';
 import { ensurePersisted } from '../../store/persist';
@@ -25,7 +26,9 @@ export function Library(): ReactElement {
   const [persisted, setPersisted] = useState(true);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const projectInputRef = useRef<HTMLInputElement>(null);
 
   const currentSourceTitle = useStudio((s) => s.source?.title);
 
@@ -54,6 +57,22 @@ export function Library(): ReactElement {
       await loadSource(studioStore.getState(), { kind: 'file', id: asset.id });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import this file');
+    }
+  }
+
+  async function handleImportProject(files: FileList | null): Promise<void> {
+    const file = files?.[0];
+    if (!file) return;
+    setError(null);
+    setImportMessage(null);
+    try {
+      const parsed = await parseProjectZip(file);
+      await applyImportedProject(studioStore, parsed);
+      setImportMessage(
+        `Imported ${parsed.manifest.notes.length} note(s), ${parsed.manifest.chapters.length} chapter(s), ${parsed.manifest.boxes.length} box(es), ${parsed.manifest.clips.length} clip(s), ${parsed.manifest.frames.length} frame(s).`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import this project');
     }
   }
 
@@ -160,6 +179,26 @@ export function Library(): ReactElement {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="border-t border-line pt-3">
+        <button
+          type="button"
+          onClick={() => projectInputRef.current?.click()}
+          className="flex items-center gap-1.5 rounded-token border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink-2 hover:bg-surface-2"
+        >
+          <FolderInput size={13} />
+          Import project
+        </button>
+        <input
+          id="project-file"
+          ref={projectInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          onChange={(e: ChangeEvent<HTMLInputElement>) => void handleImportProject(e.target.files)}
+          className="absolute h-px w-px overflow-hidden opacity-0"
+        />
+        {importMessage && <p className="mt-1.5 text-[11px] text-ink-3">{importMessage}</p>}
       </div>
 
       <div className="mt-2 border-t border-line pt-3 text-[11px] text-ink-3">
