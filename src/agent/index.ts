@@ -7,16 +7,19 @@ import { defineChaptersTools } from './tools/chapters';
 import { defineExportsTools } from './tools/exports';
 import { defineFramesTools } from './tools/frames';
 import { defineLibraryTools } from './tools/library';
+import { defineModelTools } from './tools/models';
 import { defineNotesTools } from './tools/notes';
 import { definePlaybackTools } from './tools/playback';
 import { defineSessionTools } from './tools/session';
+import { defineVisionTools } from './tools/vision';
 import { mountWebMcp } from './webmcp';
 
 /**
  * Builds the registry and defines every tool this app owns so far (session/library/playback from
- * Task 4, frames from Task 5, notes/chapters/boxes/export_notes from Task 6; later tasks add
- * their own groups by calling their own `defineXTools(registry, store)` the same way). Split from
- * `mountAgent` so tests can build a registry without touching `window`/`document`.
+ * Task 4, frames from Task 5, notes/chapters/boxes/export_notes from Task 6, models/segment/track
+ * from Task 7; later tasks add their own groups by calling their own `defineXTools(registry,
+ * store)` the same way). Split from `mountAgent` so tests can build a registry without touching
+ * `window`/`document`.
  */
 export function createAgentRegistry(store: StudioStore): Registry {
   const registry = createRegistry(createActivityDeps(store));
@@ -28,6 +31,8 @@ export function createAgentRegistry(store: StudioStore): Registry {
   defineChaptersTools(registry, store);
   defineBoxesTools(registry, store);
   defineExportsTools(registry, store);
+  defineModelTools(registry, store);
+  defineVisionTools(registry, store);
   return registry;
 }
 

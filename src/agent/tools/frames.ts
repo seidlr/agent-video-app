@@ -1,20 +1,12 @@
 import { isBoxVisibleAt } from '../../lib/boxVisibility';
 import { parseTime, secsToTimecode } from '../../lib/time';
+import { getVideoElement } from '../../lib/videoElement';
 import { captureCurrentFrame, captureFilename, type CaptureFormat } from '../../media/capture';
 import { getActiveTabCapture } from '../../media/tabCapture';
 import { generateThumbnailSprite } from '../../media/thumbnails';
 import { deletePersistedFrame, persistFrame, persistThumbnails } from '../../store/frames';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
-
-/** The vidstack player renders a single `<video>` inside the element carrying this attribute
- * (VideoStage.tsx); there is only ever one active player in this app. Returns null for a YouTube
- * source (an iframe, not a `<video>`) -- callers branch on that themselves via source.kind, since
- * the YouTube case needs a different, more specific error/hint than "video not found". Ported in
- * spirit from ../agent-video-player/src/VideoContext.tsx:163-174's element lookup. */
-function getVideoElement(): HTMLVideoElement | null {
-  return document.querySelector('[data-media-player] video');
-}
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

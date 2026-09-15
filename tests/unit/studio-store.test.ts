@@ -141,6 +141,39 @@ describe('createStudioStore', () => {
     expect(store.getState().source).toBeNull();
   });
 
+  it('addTrack/appendTrackKeyframe/removeTrack manage the tracks list', () => {
+    const store = createStudioStore();
+    const id = store.getState().addTrack({ boxIds: ['b1'], keyframes: [{ time: 0, box: { x: 0.1, y: 0.1, w: 0.1, h: 0.1 } }] });
+
+    expect(store.getState().tracks).toEqual([{ id, boxIds: ['b1'], keyframes: [{ time: 0, box: { x: 0.1, y: 0.1, w: 0.1, h: 0.1 } }] }]);
+
+    store.getState().appendTrackKeyframe(id, { time: 0.5, box: { x: 0.12, y: 0.1, w: 0.1, h: 0.1 } });
+    expect(store.getState().tracks[0]?.keyframes).toHaveLength(2);
+    expect(store.getState().tracks[0]?.keyframes[1]).toEqual({ time: 0.5, box: { x: 0.12, y: 0.1, w: 0.1, h: 0.1 } });
+
+    store.getState().removeTrack(id);
+    expect(store.getState().tracks).toEqual([]);
+  });
+
+  it('appendTrackKeyframe is a no-op for an unknown track id', () => {
+    const store = createStudioStore();
+    store.getState().appendTrackKeyframe('missing', { time: 0, box: { x: 0, y: 0, w: 1, h: 1 } });
+    expect(store.getState().tracks).toEqual([]);
+  });
+
+  it('setModelState merges a patch into a model, defaulting unset fields, and preserves other models', () => {
+    const store = createStudioStore();
+    store.getState().setModelState('edgetam', { cached: true });
+    expect(store.getState().models.edgetam).toEqual({ cached: true, loaded: false, progress: 0 });
+
+    store.getState().setModelState('edgetam', { loaded: true, progress: 1 });
+    expect(store.getState().models.edgetam).toEqual({ cached: true, loaded: true, progress: 1 });
+
+    store.getState().setModelState('slimsam', { progress: 0.5 });
+    expect(store.getState().models.slimsam).toEqual({ cached: false, loaded: false, progress: 0.5 });
+    expect(store.getState().models.edgetam).toEqual({ cached: true, loaded: true, progress: 1 });
+  });
+
   it('pushActivity keeps at most 200 entries, dropping the oldest', () => {
     const store = createStudioStore();
     for (let i = 0; i < 205; i++) {

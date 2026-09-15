@@ -41,10 +41,15 @@ const EXPECTED_TOOL_NAMES = [
   'delete_box',
   'clear_boxes',
   'export_notes',
+  'list_models',
+  'load_model',
+  'unload_model',
+  'segment',
+  'track',
 ];
 
-describe('createAgentRegistry (Task 4/5/6 DoD: registry.test.ts)', () => {
-  it('registers exactly the session/library/playback/frames/notes/chapters/boxes/export tools defined so far', () => {
+describe('createAgentRegistry (Task 4/5/6/7 DoD: registry.test.ts)', () => {
+  it('registers exactly the session/library/playback/frames/notes/chapters/boxes/export/models/vision tools defined so far', () => {
     const registry = createAgentRegistry(createStudioStore());
     expect(registry.list().map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
   });

@@ -52,6 +52,15 @@ export interface StorageState {
   quota: number;
 }
 
+/** One catalog model's live state, as `list_models`/the Models panel report it (Task 7's
+ * `ml/client.ts` is the only writer). `progress` is only meaningful while `loaded:false` and a
+ * download is in flight. */
+export interface ModelState {
+  cached: boolean;
+  loaded: boolean;
+  progress: number;
+}
+
 /**
  * The subset of @vidstack/react's MediaPlayerInstance the store's imperative player actions
  * need. Kept as a minimal structural interface (not an import from @vidstack/react) so the
@@ -91,6 +100,13 @@ export interface StudioState {
   ui: UiState;
   capabilities: Capabilities;
   storage: StorageState;
+  /** Keyed by ml/catalog.ts model id. Absent entries are treated as `{cached:false,loaded:false,
+   * progress:0}` (never checked) -- see ml/client.ts's `getModelState`. */
+  models: Record<string, ModelState>;
+  /** Whether Stage/BoxDrawLayer.tsx is currently capturing drag gestures to draw a manual box.
+   * Off by default so drawing doesn't hijack the paused-state clicks Chrome/PlayOverlay need
+   * (scrubbing, pressing play); the Tracking panel's "Draw box" button toggles it. */
+  boxDrawMode: boolean;
 
   setSource(source: ResolvedSource | null): void;
   /** Patches the current source's `thumbnailsVttUrl` in place, so a locally-generated sprite
@@ -127,6 +143,16 @@ export interface StudioState {
   updateBox(id: string, patch: Partial<Box>): void;
   removeBox(id: string): void;
   clearBoxes(): void;
+
+  addTrack(input: Omit<Track, 'id'>): string;
+  /** Appends one keyframe to an existing track (the `track` tool's per-step result) rather than
+   * replacing the whole `keyframes` array, so a long-running job can persist progress
+   * incrementally instead of holding every keyframe in a closure until it finishes. */
+  appendTrackKeyframe(id: string, keyframe: Track['keyframes'][number]): void;
+  removeTrack(id: string): void;
+
+  setModelState(id: string, patch: Partial<ModelState>): void;
+  setBoxDrawMode(on: boolean): void;
 
   addClip(input: Omit<Clip, 'id'>): string;
   removeClip(id: string): void;
@@ -202,6 +228,8 @@ export function createStudioStore() {
     ui: { theme: 'system', panel: 'activity', layout: 'studio', agentTransport: 'none' },
     capabilities: detectCapabilities(),
     storage: { persisted: false, usage: 0, quota: 0 },
+    models: {},
+    boxDrawMode: false,
 
     setSource(asset) {
       set({ source: asset });
@@ -298,6 +326,28 @@ export function createStudioStore() {
     },
     clearBoxes() {
       set({ boxes: [] });
+    },
+
+    addTrack(input) {
+      const id = nextId('track');
+      const track: Track = { ...input, id };
+      set((s) => ({ tracks: [...s.tracks, track] }));
+      return id;
+    },
+    appendTrackKeyframe(id, keyframe) {
+      set((s) => ({
+        tracks: s.tracks.map((t) => (t.id === id ? { ...t, keyframes: [...t.keyframes, keyframe] } : t)),
+      }));
+    },
+    removeTrack(id) {
+      set((s) => ({ tracks: s.tracks.filter((t) => t.id !== id) }));
+    },
+
+    setModelState(id, patch) {
+      set((s) => ({ models: { ...s.models, [id]: { cached: false, loaded: false, progress: 0, ...s.models[id], ...patch } } }));
+    },
+    setBoxDrawMode(on) {
+      set({ boxDrawMode: on });
     },
 
     addClip(input) {

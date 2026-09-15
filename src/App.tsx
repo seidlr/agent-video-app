@@ -4,7 +4,9 @@ import { VideoStage } from './components/Stage/VideoStage';
 import { Library } from './components/Panels/Library';
 import { Activity } from './components/Panels/Activity';
 import { Frames } from './components/Panels/Frames';
+import { Models } from './components/Panels/Models';
 import { Notes } from './components/Panels/Notes';
+import { Tracking } from './components/Panels/Tracking';
 import { useStudio } from './store/studio';
 import type { PanelId } from './store/studio';
 
@@ -36,6 +38,10 @@ function PanelBody({ panel }: { panel: PanelId }): ReactElement {
       return <Frames />;
     case 'notes':
       return <Notes />;
+    case 'tracking':
+      return <Tracking />;
+    case 'models':
+      return <Models />;
     default:
       return <ComingSoonPanel label={TABS.find((t) => t.id === panel)?.label ?? panel} />;
   }

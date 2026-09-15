@@ -41,11 +41,18 @@ export interface HashRow {
   hist: number[];
 }
 
+/** The `boxes` table's on-disk shape: every in-memory `Box` field plus the mask PNG itself when
+ * one exists (Task 7's `segment` tool) -- kept off the in-memory `Box` type (which only carries
+ * `maskId`) so the store never holds a multi-hundred-KB Blob in every selector's return value. */
+export interface BoxRow extends Box {
+  maskBlob?: Blob;
+}
+
 export class StudioDB extends Dexie {
   projects!: Table<ProjectRow, string>;
   assets!: Table<Asset, string>;
   frames!: Table<FrameRow, string>;
-  boxes!: Table<Box, string>;
+  boxes!: Table<BoxRow, string>;
   tracks!: Table<Track, string>;
   notes!: Table<Note, string>;
   chapters!: Table<Chapter, string>;
