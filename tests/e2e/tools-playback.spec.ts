@@ -17,6 +17,19 @@ async function listToolNames(page: Page): Promise<string[]> {
   return page.evaluate(() => navigator.modelContextTesting!.listTools().map((t) => t.name).sort());
 }
 
+/**
+ * `typeof navigator.modelContextTesting !== 'undefined'` only proves the polyfill's testing shim
+ * object exists -- it says nothing about whether mountWebMcp()'s own registerTool() calls (each
+ * one itself async) have actually finished populating it yet. That gap is narrow enough to never
+ * lose locally but wide enough to reproduce reliably on a slower CI runner (confirmed: CI failed
+ * with "Tool not found: list_library" using the naive check). Waiting for a specific `always`
+ * tool -- registered before any `local`/`yt` tool, so this alone doesn't imply readiness for
+ * those -- is the same discipline a real external agent should use before calling any tool.
+ */
+async function waitForToolsReady(page: Page): Promise<void> {
+  await page.waitForFunction(() => navigator.modelContextTesting?.listTools().some((t) => t.name === 'get_state') ?? false);
+}
+
 test.describe('agent tools (Task 4 DoD, TS-001)', () => {
   test('an external agent can load the sample, seek, play, and adjust playback using only navigator.modelContextTesting', async ({ page }) => {
     const consoleErrors: string[] = [];
@@ -27,7 +40,7 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     // Step 1: empty state, no console errors.
     await page.goto('/');
     await expect(page.locator('header b')).toHaveText('no video loaded');
-    await page.waitForFunction(() => typeof navigator.modelContextTesting !== 'undefined');
+    await waitForToolsReady(page);
 
     // Step 2: list_library sees the sample catalog and no stored videos yet.
     const listed = await execTool(page, 'list_library');
@@ -88,11 +101,13 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
 
   test('loading a YouTube source narrows the tool set to its yt-safe subset; loading a file restores it, and ontoolchange fires both times', async ({ page }) => {
     await page.goto('/');
-    await page.waitForFunction(() => typeof navigator.modelContextTesting !== 'undefined');
+    await waitForToolsReady(page);
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
-    const withLocal = await listToolNames(page);
-    expect(withLocal).toContain('step_frames');
+    // refreshLocalTools() runs off the store's own subscribe callback (fire-and-forget, not
+    // awaited by load_video), so its registerTool() calls can still be in flight once load_video
+    // resolves -- poll rather than snapshot listToolNames() once.
+    await expect.poll(async () => listToolNames(page)).toContain('step_frames');
 
     const toolchangeCount = await page.evaluate(async (id) => {
       let count = 0;
@@ -104,15 +119,14 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     }, 'jNQXAC9IVRw');
     expect(toolchangeCount).toBeGreaterThan(0);
 
-    const withYoutube = await listToolNames(page);
-    expect(withYoutube).not.toContain('step_frames');
+    await expect.poll(async () => listToolNames(page)).not.toContain('step_frames');
     // Every yt-unsafe local tool is gone, but every always tool is untouched.
+    const withYoutube = await listToolNames(page);
     expect(withYoutube).toContain('get_state');
     expect(withYoutube).toContain('play');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
-    const restored = await listToolNames(page);
-    expect(restored).toContain('step_frames');
+    await expect.poll(async () => listToolNames(page)).toContain('step_frames');
   });
 
   test('window.agentVideo (the scripting bridge) can call seek, and the call is logged to Activity with via:"bridge"', async ({ page }) => {
