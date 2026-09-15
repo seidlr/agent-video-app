@@ -346,7 +346,7 @@ Image results: `capture_frame` always shows the frame in the Frames tray (so bro
 - [x] Task 6: Notes, chapters, tags, timeline markers, panels, export formats (md/json/vtt/srt/csv/edl)
 - [x] Task 7: Boxes + EdgeTAM segmentation + tracking + mask overlay + manual box drawing
 - [x] Task 8: Analysis: scene detection, similar frames, Whisper transcript + search, object detection
-- [ ] Task 9: Clips, mp4/webm export, gif export, project zip export/import
+- [x] Task 9: Clips, mp4/webm export, gif export, project zip export/import
 - [ ] Task 10: Skill package, well-known discovery, llms.txt, Skill panel, per-agent docs
 - [ ] Task 11: MCP server: MCP App (`.mcpb` + connector), instance-bound command bus, HTTP bus for Codex CLI, single-file build, PiP
 - [ ] Task 12: Local vision-language eyes (describe frame/range, ask) and Florence-2 OCR/grounding
