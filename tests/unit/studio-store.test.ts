@@ -185,6 +185,33 @@ describe('createStudioStore', () => {
     expect(store.getState().scenes).toEqual([{ start: 0, end: 8 }]);
   });
 
+  it('setNotes/setChapters/setBoxes/setTracks/setClips/setFrames wholesale-replace their slices (project-restore-on-boot use)', () => {
+    const store = createStudioStore();
+    const note = { id: 'n1', time: 1, text: 'hi', tags: [], createdBy: 'user' as const, createdAt: 0 };
+    const chapter = { id: 'c1', start: 0, end: 2, title: 'Intro' };
+    const box = { id: 'b1', time: 0, x: 0, y: 0, w: 1, h: 1, label: 'x', source: 'manual' as const };
+    const track = { id: 't1', boxIds: ['b1'], keyframes: [] };
+    const clip = { id: 'cl1', start: 0, end: 1, order: 0 };
+    const frame = { id: 'f1', time: 0, kind: 'frame' as const, width: 10, height: 10, blobUrl: 'blob:x' };
+
+    store.getState().setNotes([note]);
+    store.getState().setChapters([chapter]);
+    store.getState().setBoxes([box]);
+    store.getState().setTracks([track]);
+    store.getState().setClips([clip]);
+    store.getState().setFrames([frame]);
+
+    expect(store.getState().notes).toEqual([note]);
+    expect(store.getState().chapters).toEqual([chapter]);
+    expect(store.getState().boxes).toEqual([box]);
+    expect(store.getState().tracks).toEqual([track]);
+    expect(store.getState().clips).toEqual([clip]);
+    expect(store.getState().frames).toEqual([frame]);
+
+    store.getState().setNotes([]);
+    expect(store.getState().notes).toEqual([]);
+  });
+
   it('setVisionSearch replaces the last search_frames result wholesale', () => {
     const store = createStudioStore();
     store.getState().setVisionSearch({ query: 'a red image', ranges: [{ start: 0, end: 2, score: 0.15 }] });

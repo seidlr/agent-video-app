@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { db } from '../../src/store/db';
-import { deletePersistedFrame, getPersistedThumbnails, persistFrame, persistThumbnails } from '../../src/store/frames';
+import { deletePersistedFrame, getPersistedThumbnails, persistFrame, persistThumbnails, restoreFrames } from '../../src/store/frames';
+import { createStudioStore } from '../../src/store/studio';
 
 describe('store/frames persistence', () => {
   afterEach(async () => {
@@ -41,5 +42,17 @@ describe('store/frames persistence', () => {
 
   it('getPersistedThumbnails returns undefined for an asset with no sprite yet', async () => {
     expect(await getPersistedThumbnails('nope')).toBeUndefined();
+  });
+
+  it('restoreFrames populates the store from Dexie, ordered by time, with a fresh blob URL per frame', async () => {
+    await persistFrame({ id: 'f2', time: 5, kind: 'frame', width: 10, height: 10, blob: new Blob([new Uint8Array(1)]) });
+    await persistFrame({ id: 'f1', time: 1, kind: 'frame', width: 10, height: 10, blob: new Blob([new Uint8Array(1)]) });
+
+    const store = createStudioStore();
+    await restoreFrames(store);
+
+    const frames = store.getState().frames;
+    expect(frames.map((f) => f.id)).toEqual(['f1', 'f2']);
+    expect(frames[0]?.blobUrl).toMatch(/^blob:/);
   });
 });

@@ -133,6 +133,10 @@ export interface StudioState {
 
   addFrame(input: Omit<FrameEntry, 'id'>): string;
   removeFrame(id: string): void;
+  /** Wholesale-replaces `frames` -- used to restore the Frames tray on boot from Dexie (each
+   * entry's `blobUrl` freshly re-created there, since object URLs don't survive a reload) and by
+   * `import_project` (Task 9). */
+  setFrames(frames: FrameEntry[]): void;
 
   setCurrentTime(t: number): void;
   setDuration(d: number): void;
@@ -147,10 +151,15 @@ export interface StudioState {
   addNote(input: Omit<Note, 'id' | 'createdAt'>): string;
   updateNote(id: string, patch: Partial<Note>): void;
   removeNote(id: string): void;
+  /** Wholesale-replaces `notes` -- used to restore a persisted project on boot and by
+   * `import_project` (Task 9); not used by ordinary add/update/remove call sites. */
+  setNotes(notes: Note[]): void;
 
   addChapter(input: Omit<Chapter, 'id'>): string;
   updateChapter(id: string, patch: Partial<Chapter>): void;
   removeChapter(id: string): void;
+  /** Wholesale-replaces `chapters` -- same project-restore/import use as `setNotes`. */
+  setChapters(chapters: Chapter[]): void;
 
   /** Replaces the whole `scenes` slice (`detect_scenes`'s own result, Task 8). */
   setScenes(scenes: Scene[]): void;
@@ -161,6 +170,8 @@ export interface StudioState {
   updateBox(id: string, patch: Partial<Box>): void;
   removeBox(id: string): void;
   clearBoxes(): void;
+  /** Wholesale-replaces `boxes` -- same project-restore/import use as `setNotes`. */
+  setBoxes(boxes: Box[]): void;
 
   addTrack(input: Omit<Track, 'id'>): string;
   /** Appends one keyframe to an existing track (the `track` tool's per-step result) rather than
@@ -168,6 +179,8 @@ export interface StudioState {
    * incrementally instead of holding every keyframe in a closure until it finishes. */
   appendTrackKeyframe(id: string, keyframe: Track['keyframes'][number]): void;
   removeTrack(id: string): void;
+  /** Wholesale-replaces `tracks` -- same project-restore/import use as `setNotes`. */
+  setTracks(tracks: Track[]): void;
 
   setModelState(id: string, patch: Partial<ModelState>): void;
   setBoxDrawMode(on: boolean): void;
@@ -181,6 +194,8 @@ export interface StudioState {
   addClip(input: Omit<Clip, 'id'>): string;
   removeClip(id: string): void;
   reorderClips(order: string[]): void;
+  /** Wholesale-replaces `clips` -- same project-restore/import use as `setNotes`. */
+  setClips(clips: Clip[]): void;
 
   pushActivity(call: Omit<ToolCall, 'endedAt' | 'result' | 'error'>): void;
   updateActivity(id: string, patch: Partial<ToolCall>): void;
@@ -280,6 +295,9 @@ export function createStudioStore() {
         return { frames: s.frames.filter((f) => f.id !== id) };
       });
     },
+    setFrames(frames) {
+      set({ frames });
+    },
 
     setCurrentTime(t) {
       set((s) => ({ player: { ...s.player, currentTime: t } }));
@@ -321,6 +339,9 @@ export function createStudioStore() {
     removeNote(id) {
       set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }));
     },
+    setNotes(notes) {
+      set({ notes });
+    },
 
     addChapter(input) {
       const overlap = get().chapters.some((c) => rangesOverlap(input.start, input.end, c.start, c.end));
@@ -337,6 +358,9 @@ export function createStudioStore() {
     },
     removeChapter(id) {
       set((s) => ({ chapters: s.chapters.filter((c) => c.id !== id) }));
+    },
+    setChapters(chapters) {
+      set({ chapters });
     },
 
     setScenes(scenes) {
@@ -361,6 +385,9 @@ export function createStudioStore() {
     clearBoxes() {
       set({ boxes: [] });
     },
+    setBoxes(boxes) {
+      set({ boxes });
+    },
 
     addTrack(input) {
       const id = nextId('track');
@@ -375,6 +402,9 @@ export function createStudioStore() {
     },
     removeTrack(id) {
       set((s) => ({ tracks: s.tracks.filter((t) => t.id !== id) }));
+    },
+    setTracks(tracks) {
+      set({ tracks });
     },
 
     setModelState(id, patch) {
@@ -410,6 +440,9 @@ export function createStudioStore() {
           .filter((c): c is Clip => c !== null);
         return { clips: reordered };
       });
+    },
+    setClips(clips) {
+      set({ clips });
     },
 
     pushActivity(call) {
