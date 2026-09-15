@@ -14,6 +14,15 @@ export default defineConfig({
   testDir: '.',
   testMatch: ['tests/e2e/**/*.spec.ts', 'tests/unit/opfs.test.ts', 'server/test/**/*.test.ts'],
   fullyParallel: true,
+  // CI runs 1 worker, not Playwright's own CPU-based default (2 on this repo's runner): diagnostic
+  // instrumentation on the tools-playback.spec.ts:101 flake (see the plan's own Deviations entry)
+  // showed page.evaluate() itself going completely unresponsive for the full remaining timeout
+  // window right after the store's own state had already correctly updated -- not slow app logic,
+  // a genuinely starved renderer process, most likely from 2 concurrent real "Google Chrome"
+  // instances (plus other tests' real CPU-bound video encode/decode work) sharing this runner's
+  // small core count. Serializing CI runs slower but removes the contention outright; local runs
+  // keep the CPU-count default.
+  workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',

@@ -106,41 +106,25 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     // refreshSourceTools() (agent/webmcp.ts) runs off the store's own subscribe callback (fire-
     // and-forget, not awaited by load_video), so its registerTool() calls can still be in flight
     // once load_video resolves -- poll rather than snapshot listToolNames() once. This poll's
-    // timeout was bumped repeatedly across Tasks 8-11 (15s -> 30s -> 60s -> 90s -> 150s) chasing a
-    // CI-only failure. A real, separate boot-time race (main.tsx's last-source restore clobbering
-    // a fresher load) was found and fixed (restoreLastSourceOnBoot in media/load.ts), but the exact
-    // same CI symptom recurred immediately after, so that was not the (sole) cause -- temporary
-    // [diag] console.error instrumentation below is gathering real evidence before the next fix
-    // attempt rather than guessing again.
+    // timeout was bumped repeatedly across Tasks 8-11 chasing a CI-only failure (see the plan's own
+    // Deviations entry for the full history: a real boot-time race was found and fixed along the
+    // way, but the actual root cause -- confirmed by temporary diagnostic instrumentation -- was
+    // 2 concurrent real Chrome instances (this repo's own CI worker count) starving each other's
+    // renderer process on the runner's small core count; playwright.config.ts now runs CI with a
+    // single worker instead. 30s remains real, generous headroom for actual registration latency.
     await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
 
-    const beforeCallSourceKind = await page.evaluate(() => (window as unknown as { __studioStore: { getState(): { source?: { kind?: string } | null } } }).__studioStore.getState().source?.kind ?? null);
-    console.error(`[diag] before load_video(youtube): source.kind=${beforeCallSourceKind} t=${Date.now()}`);
-
-    const start = Date.now();
     const toolchangeCount = await page.evaluate(async (id) => {
       let count = 0;
       document.modelContext!.addEventListener('toolchange', () => {
         count++;
       });
-      const resultJson = await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
-      return { count, resultJson };
+      await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
+      return count;
     }, 'jNQXAC9IVRw');
-    console.error(`[diag] load_video(youtube) took ${Date.now() - start}ms, result=${toolchangeCount.resultJson}, toolchangeCount=${toolchangeCount.count}`);
-    expect(toolchangeCount.count).toBeGreaterThan(0);
+    expect(toolchangeCount).toBeGreaterThan(0);
 
-    const afterCallSourceKind = await page.evaluate(() => (window as unknown as { __studioStore: { getState(): { source?: { kind?: string } | null } } }).__studioStore.getState().source?.kind ?? null);
-    console.error(`[diag] after load_video(youtube): source.kind=${afterCallSourceKind} t=${Date.now()}`);
-
-    let pollCount = 0;
-    await expect
-      .poll(async () => {
-        pollCount++;
-        const kind = await page.evaluate(() => (window as unknown as { __studioStore: { getState(): { source?: { kind?: string } | null } } }).__studioStore.getState().source?.kind ?? null);
-        if (pollCount % 5 === 1) console.error(`[diag] poll#${pollCount} t=${Date.now()} source.kind=${kind}`);
-        return listToolNames(page);
-      }, { timeout: 30_000 })
-      .not.toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).not.toContain('step_frames');
     // Every yt-unsafe local tool is gone, but every always tool is untouched.
     const withYoutube = await listToolNames(page);
     expect(withYoutube).toContain('get_state');
