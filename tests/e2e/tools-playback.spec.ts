@@ -104,8 +104,11 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
     // refreshLocalTools() runs off the store's own subscribe callback (fire-and-forget, not
     // awaited by load_video), so its registerTool() calls can still be in flight once load_video
-    // resolves -- poll rather than snapshot listToolNames() once.
-    await expect.poll(async () => listToolNames(page)).toContain('step_frames');
+    // resolves -- poll rather than snapshot listToolNames() once. Explicit 15s timeout (well past
+    // Playwright's 5s default): each source-kind transition now unregisters/reregisters every
+    // `local`-tagged tool (Task 7 added segment/track to that set), which can take noticeably
+    // longer on a loaded CI runner than locally.
+    await expect.poll(async () => listToolNames(page), { timeout: 15_000 }).toContain('step_frames');
 
     const toolchangeCount = await page.evaluate(async (id) => {
       let count = 0;
@@ -117,14 +120,14 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     }, 'jNQXAC9IVRw');
     expect(toolchangeCount).toBeGreaterThan(0);
 
-    await expect.poll(async () => listToolNames(page)).not.toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 15_000 }).not.toContain('step_frames');
     // Every yt-unsafe local tool is gone, but every always tool is untouched.
     const withYoutube = await listToolNames(page);
     expect(withYoutube).toContain('get_state');
     expect(withYoutube).toContain('play');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
-    await expect.poll(async () => listToolNames(page)).toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 15_000 }).toContain('step_frames');
   });
 
   test('window.agentVideo (the scripting bridge) can call seek, and the call is logged to Activity with via:"bridge"', async ({ page }) => {
