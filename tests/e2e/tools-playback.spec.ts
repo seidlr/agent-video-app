@@ -99,27 +99,20 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
   });
 
   test('loading a YouTube source narrows the tool set to its yt-safe subset; loading a file restores it, and ontoolchange fires both times', async ({ page }) => {
-    // Three sequential expect.poll calls below each allow up to 150s on a loaded CI runner; the
-    // overall test timeout is bumped well past their 450s combined worst case to give all three
-    // (plus the rest of the test) real room.
-    test.setTimeout(540_000);
+    test.setTimeout(90_000);
     await page.goto('/');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
     // refreshSourceTools() (agent/webmcp.ts) runs off the store's own subscribe callback (fire-
     // and-forget, not awaited by load_video), so its registerTool() calls can still be in flight
-    // once load_video resolves -- poll rather than snapshot listToolNames() once. History: 15s ->
-    // 30s (Task 8's tools landed) -> 60s (Task 9 added 7 more tools) -> 90s (Task 10 added zero
-    // tools but 60s still failed twice on an unchanged registry -- CI-runner variance, not count)
-    // -> 150s (this bump: Task 11's own webmcp.ts fix -- see the plan's own Deviations entry --
-    // replaced whole-batch retire+reregister with a per-tool diff, cutting real registration
-    // *work* by roughly a third measured locally, yet the very next CI run, on a commit that
-    // touched zero browser code, still failed at 90s). The structural fix is real and reduces
-    // actual `setTimeout(0)`-bound macrotask round trips (confirmed by reading
-    // @mcp-b/webmcp-polyfill's own source, not guessed), but a shared CI runner's own tail latency
-    // is a second, independent variable this fix cannot eliminate -- this bump is deliberately
-    // generous headroom on top of the real fix, not a substitute for it.
-    await expect.poll(async () => listToolNames(page), { timeout: 150_000 }).toContain('step_frames');
+    // once load_video resolves -- poll rather than snapshot listToolNames() once. This poll's
+    // timeout was bumped repeatedly across Tasks 8-11 (15s -> 30s -> 60s -> 90s -> 150s) chasing a
+    // CI-only failure that no bump ever actually fixed; the real cause (see the plan's own
+    // Deviations entry for this task) was unrelated to registration speed entirely -- a genuine
+    // boot-time race in main.tsx's last-source restore, now fixed at the source
+    // (restoreLastSourceOnBoot in media/load.ts). 30s is real, if generous, headroom for actual
+    // tool-registration latency, not a guess against an unsolved flake.
+    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
 
     const toolchangeCount = await page.evaluate(async (id) => {
       let count = 0;
@@ -131,14 +124,14 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     }, 'jNQXAC9IVRw');
     expect(toolchangeCount).toBeGreaterThan(0);
 
-    await expect.poll(async () => listToolNames(page), { timeout: 150_000 }).not.toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).not.toContain('step_frames');
     // Every yt-unsafe local tool is gone, but every always tool is untouched.
     const withYoutube = await listToolNames(page);
     expect(withYoutube).toContain('get_state');
     expect(withYoutube).toContain('play');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
-    await expect.poll(async () => listToolNames(page), { timeout: 150_000 }).toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
   });
 
   test('window.agentVideo (the scripting bridge) can call seek, and the call is logged to Activity with via:"bridge"', async ({ page }) => {

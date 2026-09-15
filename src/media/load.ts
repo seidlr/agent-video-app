@@ -1,6 +1,6 @@
 import { DEFAULT_PROJECT_ID } from '../lib/types';
-import type { StudioState } from '../store/studio';
-import { readLibraryFile, saveLastSource } from '../store/library';
+import type { StudioState, StudioStore } from '../store/studio';
+import { getLastSource, readLibraryFile, saveLastSource } from '../store/library';
 import { defaultSourceDeps, resolveSource, type SourceRequest } from './source';
 
 /**
@@ -18,4 +18,20 @@ export async function loadSource(store: Pick<StudioState, 'setSource'>, request:
   const resolved = await resolveSource(request, deps);
   store.setSource(resolved);
   await saveLastSource(DEFAULT_PROJECT_ID, request);
+}
+
+/**
+ * Restores the project's last-loaded source on boot (Task 3 DoD) -- but only if nothing has
+ * already loaded a source in the meantime. `getLastSource`'s IndexedDB read is a real async gap:
+ * under real browser I/O contention (confirmed root cause of a CI-only failure in
+ * tests/e2e/tools-playback.spec.ts's YouTube-narrowing test, reproducible on every run regardless
+ * of timeout -- a prior "fix" and multiple timeout bumps there addressed a red herring) it can
+ * resolve *after* a caller's own immediate `load_video` call already landed. Blindly applying the
+ * restored value at that point would silently revert that newer load back to whatever was open
+ * last session.
+ */
+export async function restoreLastSourceOnBoot(store: StudioStore, projectId: string): Promise<void> {
+  const lastSource = await getLastSource(projectId);
+  if (!lastSource || store.getState().source) return;
+  await loadSource(store.getState(), lastSource).catch(() => undefined);
 }

@@ -3,9 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { mountAgent } from './agent';
 import { App } from './App';
 import { DEFAULT_PROJECT_ID } from './lib/types';
-import { loadSource } from './media/load';
+import { restoreLastSourceOnBoot } from './media/load';
 import { restoreFrames } from './store/frames';
-import { getLastSource } from './store/library';
 import { restoreProjectData, wireProjectPersistence } from './store/projectPersistence';
 import { studioStore } from './store/studio';
 import { getPersistedTranscript } from './store/transcript';
@@ -29,10 +28,9 @@ createRoot(rootEl).render(
 // Restore the last-loaded video across a full page reload without the user re-selecting it
 // (Task 3 DoD). Best-effort: a stale/deleted asset or an unreachable URL must not block boot --
 // the app just falls back to the empty "no video loaded" state, same as a first-ever visit.
-const sourceRestored = getLastSource(DEFAULT_PROJECT_ID).then((lastSource) => {
-  if (!lastSource) return;
-  return loadSource(studioStore.getState(), lastSource).catch(() => undefined);
-});
+// restoreLastSourceOnBoot itself guards against clobbering a source an agent already loaded
+// while this read was still in flight (see its own doc comment).
+const sourceRestored = restoreLastSourceOnBoot(studioStore, DEFAULT_PROJECT_ID);
 
 // Restore notes/chapters/boxes/tracks/clips and the Frames tray from Dexie (Task 9's own
 // reload-persistence pass -- see store/projectPersistence.ts's own doc comment for why this was a
