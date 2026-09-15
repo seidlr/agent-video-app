@@ -256,3 +256,32 @@ test.describe('vision tools: search_frames/find_similar_frames method:dino @ml',
     expect(ranges[0]!.score).toBeGreaterThanOrEqual(0.85);
   });
 });
+
+test.describe('vision tools: estimate_depth @ml', () => {
+  test('estimate_depth {time:30, format:"stats"} on the sample returns a shotType (DoD)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loadSpriteFightAndWaitReady(page);
+
+    const result = await execTool(page, 'estimate_depth', { time: '30', format: 'stats', confirmDownload: true, waitSeconds: 60 });
+    expect(result.ok).toBe(true);
+    expect(['close-up', 'medium', 'wide']).toContain(result.shotType);
+    expect(typeof result.near).toBe('number');
+    expect(typeof result.far).toBe('number');
+    expect(result.near as number).toBeGreaterThanOrEqual(result.far as number);
+    expect(result.frameId).toBeUndefined();
+  });
+
+  test('estimate_depth {format:"image"} adds a depth-kind frame to the Frames tray (DoD)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loadSpriteFightAndWaitReady(page);
+
+    const result = await execTool(page, 'estimate_depth', { time: '30', format: 'image', confirmDownload: true, waitSeconds: 60 });
+    expect(result.ok).toBe(true);
+    expect(result.frameId).toBeTruthy();
+
+    const frames = await execTool(page, 'list_frames');
+    expect(frames.ok).toBe(true);
+    const depthFrame = (frames.frames as { id: string; kind: string }[]).find((f) => f.id === result.frameId);
+    expect(depthFrame).toMatchObject({ kind: 'depth' });
+  });
+});

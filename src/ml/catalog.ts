@@ -202,6 +202,23 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     // onnx/model_q4.onnx_data (14,684,160 B), matching the plan's own "q4 15 MB" figure.
     approxMB: 15,
   },
+  {
+    id: 'depth-anything-v2-small',
+    task: 'depth-estimation',
+    // SHORTCUT: this exact repo (no "-ONNX" suffix) is the one the plan names and its own
+    // README's `new_version:` field points to `onnx-community/depth-anything-v2-small-ONNX` as a
+    // newer, differently-laid-out mirror -- still resolves fine today (confirmed live), so kept
+    // as approved rather than substituted; upgrade trigger: this repo actually going 404/stale.
+    repo: 'onnx-community/depth-anything-v2-small',
+    dtype: 'q4f16',
+    family: 'depth',
+    device: 'webgpu',
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/onnx-community/depth-anything-v2-small',
+    // Verified against the live HF tree API: onnx/model_q4f16.onnx (19,126,267 B), matching the
+    // plan's own "19 MB" figure.
+    approxMB: 19,
+  },
 ];
 
 export function getCatalogEntry(id: string): ModelCatalogEntry | undefined {

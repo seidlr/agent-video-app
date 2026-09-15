@@ -50,6 +50,7 @@ const EXPECTED_TOOL_NAMES = [
   'find_similar_frames',
   'search_frames',
   'detect_objects',
+  'estimate_depth',
   'transcribe',
   'get_transcript',
   'search_transcript',

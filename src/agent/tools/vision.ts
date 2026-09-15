@@ -2,6 +2,7 @@ import { getMlQueryOverrides, mlClient, type MlWorker } from '../../ml/client';
 import { getCatalogEntry, pickDetectModel, pickSegmentModel } from '../../ml/catalog';
 import { dilatePixelBox, getTracker, toGrayscale, trackFrames, type GrayFrame, type PixelBox } from '../../ml/tracker';
 import { dhash64, quantizeHist } from '../../media/dhash';
+import type { DepthStats } from '../../media/depthStats';
 import { sampleBitmapsForEmbedding } from '../../media/embeddingSamples';
 import { findTopRanges } from '../../media/embeddingSearch';
 import {
@@ -17,6 +18,7 @@ import { parseTime, secsToTimecode } from '../../lib/time';
 import { getVideoElement } from '../../lib/videoElement';
 import { persistBox, persistTrack } from '../../store/boxes';
 import { getPersistedEmbeddings, persistEmbeddings, type StoredEmbedding } from '../../store/embeddings';
+import { persistFrame } from '../../store/frames';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolCallContext, ToolResult } from '../registry';
 import type { ResolvedSource } from '../../media/source';
@@ -45,6 +47,8 @@ interface SegmentWorkerResult {
 }
 
 type DetectObjectsResult = { label: string; score: number; box: { x: number; y: number; w: number; h: number } }[];
+
+type DepthEstimateResult = { stats: DepthStats; imagePng?: Blob; width: number; height: number };
 
 type TrackArgs = {
   boxId: string;
@@ -475,6 +479,77 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
         summary: `${detections.length} detection(s) at ${secsToTimecode(capturedAt)}${zeroShot ? ` for "${args.labels!.join(', ')}"` : ''}`,
         detections,
         boxIds: args.addBoxes ? boxIds : undefined,
+      };
+    },
+  });
+
+  registry.define<{ time?: string | number; format?: 'image' | 'stats'; confirmDownload?: boolean }>({
+    name: 'estimate_depth',
+    description:
+      'Estimates monocular depth at a frame (Depth Anything v2). format:"stats" (default) returns near/far/mean/variance and an inferred shotType (close-up/medium/wide); format:"image" also adds a colorized depth map to the Frames tray. First call without confirmDownload to see the model size.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        time: { type: ['string', 'number'] },
+        format: { type: 'string', enum: ['image', 'stats'] },
+        confirmDownload: { type: 'boolean' },
+      },
+    },
+    group: 'vision',
+    when: 'local',
+    mode: 'job',
+    handler: async (args): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'estimate_depth_unavailable_on_youtube', hint: 'Needs direct pixel access; not available for a YouTube source.' };
+      }
+
+      const video = getVideoElement();
+      if (!video) return { ok: false, error: 'video_not_ready' };
+
+      const modelId = 'depth-anything-v2-small';
+      const ensured = await mlClient.ensureModel(modelId, {
+        confirmDownload: args.confirmDownload,
+        onProgress: (fraction) => store.getState().setModelState(modelId, { progress: fraction }),
+      });
+      if (!ensured.ok) {
+        if (ensured.error === 'unknown_model') return { ok: false, error: 'unknown_model', hint: `no model with id "${modelId}"` };
+        return { ok: false, error: ensured.error, hint: ensured.hint };
+      }
+      store.getState().setModelState(modelId, { loaded: true, cached: true, progress: 1 });
+
+      let previousTime: number | undefined;
+      if (args.time !== undefined) {
+        const target = parseTime(args.time, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
+        if (target === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+        previousTime = state.player.currentTime;
+        await store.getState().seek(target);
+      }
+
+      const format = args.format ?? 'stats';
+      const bitmap = await createImageBitmap(video);
+      let result: DepthEstimateResult;
+      try {
+        result = await ensured.worker.call<DepthEstimateResult>('estimate_depth', { bitmap, includeImage: format === 'image' });
+      } finally {
+        bitmap.close();
+      }
+
+      const capturedAt = video.currentTime;
+      if (previousTime !== undefined) await store.getState().seek(previousTime);
+
+      if (format === 'image' && result.imagePng) {
+        const blobUrl = URL.createObjectURL(result.imagePng);
+        const frameId = store.getState().addFrame({ time: capturedAt, kind: 'depth', width: result.width, height: result.height, blobUrl });
+        await persistFrame({ id: frameId, time: capturedAt, kind: 'depth', width: result.width, height: result.height, blob: result.imagePng });
+        return { ok: true, summary: `Depth map added to Frames tray (${result.stats.shotType} shot)`, frameId, ...result.stats };
+      }
+
+      return {
+        ok: true,
+        summary: `${result.stats.shotType} shot at ${secsToTimecode(capturedAt)} (near ${result.stats.near.toFixed(2)}, far ${result.stats.far.toFixed(2)})`,
+        ...result.stats,
       };
     },
   });
