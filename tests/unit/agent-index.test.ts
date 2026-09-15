@@ -51,6 +51,8 @@ const EXPECTED_TOOL_NAMES = [
   'search_frames',
   'detect_objects',
   'estimate_depth',
+  'detect_faces',
+  'detect_pose',
   'transcribe',
   'get_transcript',
   'search_transcript',

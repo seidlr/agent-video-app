@@ -107,6 +107,10 @@ export interface StudioState {
    * Off by default so drawing doesn't hijack the paused-state clicks Chrome/PlayOverlay need
    * (scrubbing, pressing play); the Tracking panel's "Draw box" button toggles it. */
   boxDrawMode: boolean;
+  /** The most recent `detect_pose` call's first detected person's 33 landmarks (normalized
+   * [0,1] + z + visibility), or `null` once nothing has been detected yet -- Stage/PoseOverlay.tsx
+   * reads this reactively to draw the skeleton, the same way BoxOverlay reads `boxes`. */
+  poseLandmarks: { x: number; y: number; z: number; visibility: number }[] | null;
 
   setSource(source: ResolvedSource | null): void;
   /** Patches the current source's `thumbnailsVttUrl` in place, so a locally-generated sprite
@@ -153,6 +157,7 @@ export interface StudioState {
 
   setModelState(id: string, patch: Partial<ModelState>): void;
   setBoxDrawMode(on: boolean): void;
+  setPoseLandmarks(landmarks: StudioState['poseLandmarks']): void;
 
   /** Replaces the whole in-memory transcript for `lang` (`null` = the original). `transcribe`
    * (agent/tools/transcript.ts) reads the existing segments first and merges a re-transcribed
@@ -235,6 +240,7 @@ export function createStudioStore() {
     storage: { persisted: false, usage: 0, quota: 0 },
     models: {},
     boxDrawMode: false,
+    poseLandmarks: null,
 
     setSource(asset) {
       set({ source: asset });
@@ -356,6 +362,9 @@ export function createStudioStore() {
     },
     setBoxDrawMode(on) {
       set({ boxDrawMode: on });
+    },
+    setPoseLandmarks(landmarks) {
+      set({ poseLandmarks: landmarks });
     },
 
     addClip(input) {

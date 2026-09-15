@@ -4,6 +4,7 @@ import { MediaPlayer, MediaProvider, Track, type MediaPlayerInstance, type Video
 import { BoxDrawLayer } from './BoxDrawLayer';
 import { BoxOverlay } from './BoxOverlay';
 import { MaskOverlay } from './MaskOverlay';
+import { PoseOverlay } from './PoseOverlay';
 import { Chrome } from './Chrome';
 import { FrameLabel } from './FrameLabel';
 import { FrameTitle } from './FrameTitle';
@@ -222,6 +223,7 @@ export function VideoStage(): ReactElement {
         <FrameTitle title={activeChapter?.title ?? ''} hidden={!paused && hasPlayed} />
         <MaskOverlay />
         <BoxOverlay />
+        <PoseOverlay />
         <BoxDrawLayer />
         <PlayOverlay hidden={hasPlayed} onPlay={() => void handlePlayClick()} />
         <Chrome playerRef={playerRef} containerRef={containerRef} />

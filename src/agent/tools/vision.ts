@@ -19,6 +19,7 @@ import { getVideoElement } from '../../lib/videoElement';
 import { persistBox, persistTrack } from '../../store/boxes';
 import { getPersistedEmbeddings, persistEmbeddings, type StoredEmbedding } from '../../store/embeddings';
 import { persistFrame } from '../../store/frames';
+import { detectFacesOnBitmap, detectPoseOnBitmap, ensureFaceDetector, ensurePoseLandmarker } from '../../ml/faces';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolCallContext, ToolResult } from '../registry';
 import type { ResolvedSource } from '../../media/source';
@@ -551,6 +552,117 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
         summary: `${result.stats.shotType} shot at ${secsToTimecode(capturedAt)} (near ${result.stats.near.toFixed(2)}, far ${result.stats.far.toFixed(2)})`,
         ...result.stats,
       };
+    },
+  });
+
+  registry.define<{ time?: string | number; addBoxes?: boolean; confirmDownload?: boolean }>({
+    name: 'detect_faces',
+    description: 'Detects faces at a frame (MediaPipe BlazeFace short-range): box + 6 keypoints per face. First call without confirmDownload to see the model size.',
+    inputSchema: {
+      type: 'object',
+      properties: { time: { type: ['string', 'number'] }, addBoxes: { type: 'boolean' }, confirmDownload: { type: 'boolean' } },
+    },
+    group: 'vision',
+    when: 'local',
+    mode: 'job',
+    handler: async (args): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'detect_faces_unavailable_on_youtube', hint: 'Needs direct pixel access; not available for a YouTube source.' };
+      }
+
+      const ensured = await ensureFaceDetector(args.confirmDownload);
+      if (!ensured.ok) return { ok: false, error: ensured.error, hint: ensured.hint };
+
+      const video = getVideoElement();
+      if (!video) return { ok: false, error: 'video_not_ready' };
+
+      let previousTime: number | undefined;
+      if (args.time !== undefined) {
+        const target = parseTime(args.time, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
+        if (target === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+        previousTime = state.player.currentTime;
+        await store.getState().seek(target);
+      }
+
+      const bitmap = await createImageBitmap(video);
+      let faces: ReturnType<typeof detectFacesOnBitmap>;
+      try {
+        faces = detectFacesOnBitmap(bitmap);
+      } finally {
+        bitmap.close();
+      }
+
+      const capturedAt = video.currentTime;
+      if (previousTime !== undefined) await store.getState().seek(previousTime);
+
+      let boxIds: string[] = [];
+      if (args.addBoxes) {
+        const source: BoxSource = 'detect';
+        boxIds = faces.map((f) => store.getState().addBox({ time: capturedAt, x: f.box.x, y: f.box.y, w: f.box.w, h: f.box.h, label: 'face', source }));
+      }
+
+      return { ok: true, summary: `${faces.length} face(s) at ${secsToTimecode(capturedAt)}`, faces, boxIds: args.addBoxes ? boxIds : undefined };
+    },
+  });
+
+  registry.define<{ time?: string | number; addBoxes?: boolean; confirmDownload?: boolean }>({
+    name: 'detect_pose',
+    description: 'Detects body pose landmarks at a frame (MediaPipe pose-landmarker-lite): 33 normalized landmarks per detected person. First call without confirmDownload to see the model size.',
+    inputSchema: {
+      type: 'object',
+      properties: { time: { type: ['string', 'number'] }, addBoxes: { type: 'boolean' }, confirmDownload: { type: 'boolean' } },
+    },
+    group: 'vision',
+    when: 'local',
+    mode: 'job',
+    handler: async (args): Promise<ToolResult> => {
+      const state = store.getState();
+      if (!state.source) return { ok: false, error: 'no_video_loaded' };
+      if (state.source.kind === 'youtube') {
+        return { ok: false, error: 'detect_pose_unavailable_on_youtube', hint: 'Needs direct pixel access; not available for a YouTube source.' };
+      }
+
+      const ensured = await ensurePoseLandmarker(args.confirmDownload);
+      if (!ensured.ok) return { ok: false, error: ensured.error, hint: ensured.hint };
+
+      const video = getVideoElement();
+      if (!video) return { ok: false, error: 'video_not_ready' };
+
+      let previousTime: number | undefined;
+      if (args.time !== undefined) {
+        const target = parseTime(args.time, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
+        if (target === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+        previousTime = state.player.currentTime;
+        await store.getState().seek(target);
+      }
+
+      const bitmap = await createImageBitmap(video);
+      let poses: ReturnType<typeof detectPoseOnBitmap>;
+      try {
+        poses = detectPoseOnBitmap(bitmap);
+      } finally {
+        bitmap.close();
+      }
+
+      const capturedAt = video.currentTime;
+      if (previousTime !== undefined) await store.getState().seek(previousTime);
+      store.getState().setPoseLandmarks(poses.length > 0 ? poses[0]!.landmarks : null);
+
+      let boxIds: string[] = [];
+      if (args.addBoxes) {
+        const source: BoxSource = 'detect';
+        boxIds = poses.map((p) => {
+          const xs = p.landmarks.map((l) => l.x);
+          const ys = p.landmarks.map((l) => l.y);
+          const x = Math.min(...xs);
+          const y = Math.min(...ys);
+          return store.getState().addBox({ time: capturedAt, x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, label: 'pose', source });
+        });
+      }
+
+      return { ok: true, summary: `${poses.length} pose(s) at ${secsToTimecode(capturedAt)}`, poses, boxIds: args.addBoxes ? boxIds : undefined };
     },
   });
 }

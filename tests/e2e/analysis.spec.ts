@@ -285,3 +285,47 @@ test.describe('vision tools: estimate_depth @ml', () => {
     expect(depthFrame).toMatchObject({ kind: 'depth' });
   });
 });
+
+test.describe('vision tools: detect_faces/detect_pose @ml', () => {
+  test('detect_faces/detect_pose return ok:true and empty on the fixture, completing in <2s once warm (DoD)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loadFixtureAndWaitReady(page);
+
+    const facesFirst = await execTool(page, 'detect_faces', { time: '1', confirmDownload: true, waitSeconds: 30 });
+    expect(facesFirst.ok).toBe(true);
+    expect(facesFirst.faces).toEqual([]);
+    const poseFirst = await execTool(page, 'detect_pose', { time: '1', confirmDownload: true, waitSeconds: 30 });
+    expect(poseFirst.ok).toBe(true);
+    expect(poseFirst.poses).toEqual([]);
+
+    // Warm calls (models already resident this session) must complete well under 2s.
+    const facesStart = Date.now();
+    const facesWarm = await execTool(page, 'detect_faces', { time: '1' });
+    expect(Date.now() - facesStart).toBeLessThan(2000);
+    expect(facesWarm).toMatchObject({ ok: true, faces: [] });
+
+    const poseStart = Date.now();
+    const poseWarm = await execTool(page, 'detect_pose', { time: '1' });
+    expect(Date.now() - poseStart).toBeLessThan(2000);
+    expect(poseWarm).toMatchObject({ ok: true, poses: [] });
+  });
+
+  test('detect_pose landmarks on the sample render as a skeleton overlay when found (DoD)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loadSpriteFightAndWaitReady(page);
+
+    let found = false;
+    for (const t of [10, 30, 60, 90, 120]) {
+      const result = await execTool(page, 'detect_pose', { time: String(t), confirmDownload: true, waitSeconds: 30 });
+      expect(result.ok).toBe(true);
+      const poses = result.poses as { landmarks: { x: number; y: number; z: number; visibility: number }[] }[];
+      if (poses.length > 0) {
+        expect(poses[0]!.landmarks).toHaveLength(33);
+        await expect(page.locator('svg circle')).not.toHaveCount(0);
+        found = true;
+        break;
+      }
+    }
+    expect(found).toBe(true);
+  });
+});
