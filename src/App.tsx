@@ -12,6 +12,7 @@ import { Transcript } from './components/Panels/Transcript';
 import { Clips } from './components/Panels/Clips';
 import { Effects } from './components/Panels/Effects';
 import { Skill } from './components/Panels/Skill';
+import { ToastStack } from './components/ToastStack';
 import { useStudio } from './store/studio';
 import type { PanelId } from './store/studio';
 
@@ -108,6 +109,7 @@ export function App(): ReactElement {
           </aside>
         )}
       </div>
+      <ToastStack />
     </div>
   );
 }
