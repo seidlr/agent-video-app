@@ -19,6 +19,7 @@ import { getVideoElement } from '../../lib/videoElement';
 import { persistBox, persistTrack } from '../../store/boxes';
 import { getPersistedEmbeddings, persistEmbeddings, type StoredEmbedding } from '../../store/embeddings';
 import { persistFrame } from '../../store/frames';
+import { tryPersist } from '../../store/persist';
 import { detectFacesOnBitmap, detectPoseOnBitmap, ensureFaceDetector, ensurePoseLandmarker } from '../../ml/faces';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolCallContext, ToolResult } from '../registry';
@@ -140,7 +141,9 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
       const source: BoxSource = 'segment';
       const boxId = store.getState().addBox({ time: capturedAt, x: result.box.x, y: result.box.y, w: result.box.w, h: result.box.h, label, source });
       // The box's own id doubles as its mask's lookup key -- see store/boxes.ts's getPersistedBoxMask.
-      await persistBox({ id: boxId, time: capturedAt, x: result.box.x, y: result.box.y, w: result.box.w, h: result.box.h, label, source, maskBlob: result.maskPng });
+      await tryPersist(store.getState(), () =>
+        persistBox({ id: boxId, time: capturedAt, x: result.box.x, y: result.box.y, w: result.box.w, h: result.box.h, label, source, maskBlob: result.maskPng }),
+      );
 
       return {
         ok: true,
@@ -230,7 +233,7 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
         return { time, box: normalized };
       });
       const savedTrack = store.getState().tracks.find((t) => t.id === trackId);
-      if (savedTrack) await persistTrack(savedTrack);
+      if (savedTrack) await tryPersist(store.getState(), () => persistTrack(savedTrack));
 
       // BoxOverlay.tsx interpolates from the track instead of the box's own static coordinates
       // once both trackId and until are set -- until extends the box's visibility window
@@ -284,7 +287,7 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
         return { ok: false, error: 'scenes_unavailable_on_youtube', hint: 'Scene detection needs direct pixel access; not available for a YouTube source.' };
       }
 
-      const samples = await ensureFrameSamples(state.source);
+      const samples = await ensureFrameSamples(state.source, state);
       const scenes = detectScenesFromHistograms(samples, { sensitivity: args.sensitivity, minSceneDuration: args.minSceneDuration });
       // Populate the timeline's scene-boundary ticks (Markers.tsx) regardless of addChapters, so a
       // caller can preview detected boundaries before deciding whether to commit them as chapters.
@@ -352,7 +355,7 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
         return findSimilarByDino(store, args as { frameId?: string; time?: string | number; minScore?: number; confirmDownload?: boolean }, ctx);
       }
 
-      const samples = await ensureFrameSamples(state.source);
+      const samples = await ensureFrameSamples(state.source, state);
       if (samples.length === 0) return { ok: false, error: 'no_samples', hint: 'Nothing could be sampled from this source.' };
 
       let query: FrameSample;
@@ -548,9 +551,12 @@ export function defineVisionTools(registry: Registry, store: StudioStore): void 
       if (previousTime !== undefined) await store.getState().seek(previousTime);
 
       if (format === 'image' && result.imagePng) {
-        const blobUrl = URL.createObjectURL(result.imagePng);
+        const imagePng = result.imagePng;
+        const blobUrl = URL.createObjectURL(imagePng);
         const frameId = store.getState().addFrame({ time: capturedAt, kind: 'depth', width: result.width, height: result.height, blobUrl });
-        await persistFrame({ id: frameId, time: capturedAt, kind: 'depth', width: result.width, height: result.height, blob: result.imagePng });
+        await tryPersist(store.getState(), () =>
+          persistFrame({ id: frameId, time: capturedAt, kind: 'depth', width: result.width, height: result.height, blob: imagePng }),
+        );
         return { ok: true, summary: `Depth map added to Frames tray (${result.stats.shotType} shot)`, frameId, ...result.stats };
       }
 
@@ -752,7 +758,7 @@ async function ensureEmbeddingIndex(
   }
 
   embeddingIndexCache.set(cacheKey, samples);
-  if (source.assetId) await persistEmbeddings(source.assetId, kind, samples);
+  if (source.assetId) await tryPersist(store.getState(), () => persistEmbeddings(source.assetId!, kind, samples));
   return { ok: true, samples, worker };
 }
 

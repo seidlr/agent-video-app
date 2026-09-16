@@ -5,6 +5,7 @@ import { captureCurrentFrame, captureFilename, type CaptureFormat } from '../../
 import { getActiveTabCapture } from '../../media/tabCapture';
 import { generateThumbnailSprite } from '../../media/thumbnails';
 import { deletePersistedFrame, persistFrame, persistThumbnails } from '../../store/frames';
+import { tryPersist } from '../../store/persist';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
 
@@ -129,7 +130,7 @@ export function defineFramesTools(registry: Registry, store: StudioStore): void 
 
       const blobUrl = URL.createObjectURL(result.blob);
       const frameId = store.getState().addFrame({ time: capturedAt, kind: 'frame', width: result.width, height: result.height, downloadedAs, blobUrl });
-      await persistFrame({ id: frameId, time: capturedAt, kind: 'frame', width: result.width, height: result.height, blob: result.blob, downloadedAs });
+      await tryPersist(store.getState(), () => persistFrame({ id: frameId, time: capturedAt, kind: 'frame', width: result.width, height: result.height, blob: result.blob, downloadedAs }));
 
       const dataUrl = args.includeDataUrl ? await blobToDataUrl(result.blob) : undefined;
 
@@ -215,7 +216,7 @@ export function defineFramesTools(registry: Registry, store: StudioStore): void 
       store.getState().setSourceThumbnailsSprite(URL.createObjectURL(sprite.spriteBlob), sprite.timestamps);
 
       if (source.assetId) {
-        await persistThumbnails(source.assetId, sprite.spriteBlob, sprite.vtt);
+        await tryPersist(store.getState(), () => persistThumbnails(source.assetId!, sprite.spriteBlob, sprite.vtt));
       }
 
       let contactSheetFrameId: string | undefined;
@@ -224,7 +225,16 @@ export function defineFramesTools(registry: Registry, store: StudioStore): void 
         const bitmap = await createImageBitmap(sprite.spriteBlob);
         contactSheetFrameId = store.getState().addFrame({ time: 0, kind: 'contact-sheet', width: bitmap.width, height: bitmap.height, blobUrl });
         bitmap.close();
-        await persistFrame({ id: contactSheetFrameId, time: 0, kind: 'contact-sheet', width: sprite.tileWidth * Math.min(10, sprite.timestamps.length), height: sprite.tileHeight * Math.ceil(sprite.timestamps.length / 10), blob: sprite.spriteBlob });
+        await tryPersist(store.getState(), () =>
+          persistFrame({
+            id: contactSheetFrameId!,
+            time: 0,
+            kind: 'contact-sheet',
+            width: sprite.tileWidth * Math.min(10, sprite.timestamps.length),
+            height: sprite.tileHeight * Math.ceil(sprite.timestamps.length / 10),
+            blob: sprite.spriteBlob,
+          }),
+        );
       }
 
       return {

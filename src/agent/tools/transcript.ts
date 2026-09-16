@@ -5,6 +5,7 @@ import { buildSrtString } from '../../lib/exports/srt';
 import { parseTime, secsToTimecode } from '../../lib/time';
 import type { TranscriptSegment } from '../../lib/types';
 import { buildVttString } from '../../lib/vtt';
+import { tryPersist } from '../../store/persist';
 import { getPersistedTranscript, persistTranscript } from '../../store/transcript';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
@@ -112,7 +113,7 @@ export function defineTranscriptTools(registry: Registry, store: StudioStore): v
 
       const merged = mergeSegments(state.transcript.segments, from, to, segments);
       store.getState().setTranscript(merged, null);
-      if (state.source.assetId) await persistTranscript(state.source.assetId, null, merged);
+      if (state.source.assetId) await tryPersist(store.getState(), () => persistTranscript(state.source!.assetId!, null, merged));
 
       return {
         ok: true,
@@ -244,7 +245,7 @@ export function defineTranscriptTools(registry: Registry, store: StudioStore): v
       }
 
       const translated: TranscriptSegment[] = segments.map((s, i) => ({ start: s.start, end: s.end, text: translatedTexts[i] ?? s.text }));
-      if (state.source?.assetId) await persistTranscript(state.source.assetId, args.to, translated);
+      if (state.source?.assetId) await tryPersist(store.getState(), () => persistTranscript(state.source!.assetId!, args.to, translated));
 
       const format = args.format ?? 'segments';
       if (format === 'srt') return { ok: true, summary: `Translated ${translated.length} segment(s) to ${args.to} (SRT)`, text: buildSrtString(translated) };

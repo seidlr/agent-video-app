@@ -12,14 +12,18 @@ import { DEFAULT_PROJECT_ID } from '../../src/lib/types';
 import { loadSource, restoreLastSourceOnBoot } from '../../src/media/load';
 import type { StudioStore } from '../../src/store/studio';
 
-/** Minimal fake matching just the `getState().source`/`setSource` surface
- * restoreLastSourceOnBoot actually touches. */
+/** Minimal fake matching just the `getState().source`/`setSource`/`storage`/`setStorageState`
+ * surface restoreLastSourceOnBoot (via loadSource's own tryPersist call) actually touches. */
 function fakeStore(initialSource: unknown = null) {
   let source = initialSource;
+  let storage = { worksInThisContext: true };
   const setSource = vi.fn((s: unknown) => {
     source = s;
   });
-  return { getState: () => ({ source, setSource }) } as unknown as StudioStore;
+  const setStorageState = vi.fn((patch: Partial<typeof storage>) => {
+    storage = { ...storage, ...patch };
+  });
+  return { getState: () => ({ source, setSource, storage, setStorageState }) } as unknown as StudioStore;
 }
 
 describe('loadSource', () => {
@@ -27,7 +31,7 @@ describe('loadSource', () => {
     const setSource = vi.fn();
     const request = { kind: 'file' as const, id: 'a1' };
 
-    await loadSource({ setSource }, request);
+    await loadSource({ setSource, storage: { worksInThisContext: true } as never, setStorageState: vi.fn() }, request);
 
     expect(setSource).toHaveBeenCalledTimes(1);
     expect(setSource).toHaveBeenCalledWith(expect.objectContaining({ kind: 'file', assetId: 'a1' }));
@@ -38,10 +42,24 @@ describe('loadSource', () => {
     saveLastSourceMock.mockClear();
     const setSource = vi.fn();
 
-    await expect(loadSource({ setSource }, { kind: 'file', id: undefined })).rejects.toThrow(/missing_id/);
+    await expect(
+      loadSource({ setSource, storage: { worksInThisContext: true } as never, setStorageState: vi.fn() }, { kind: 'file', id: undefined }),
+    ).rejects.toThrow(/missing_id/);
 
     expect(setSource).not.toHaveBeenCalled();
     expect(saveLastSourceMock).not.toHaveBeenCalled();
+  });
+
+  it('skips persisting (without throwing) when storage is unavailable, and still sets the source', async () => {
+    const setSource = vi.fn();
+    const setStorageState = vi.fn();
+    saveLastSourceMock.mockClear();
+
+    await loadSource({ setSource, storage: { worksInThisContext: false } as never, setStorageState }, { kind: 'file', id: 'a1' });
+
+    expect(setSource).toHaveBeenCalledTimes(1);
+    expect(saveLastSourceMock).not.toHaveBeenCalled();
+    expect(setStorageState).not.toHaveBeenCalled(); // already known-unavailable -- no redundant flip
   });
 });
 

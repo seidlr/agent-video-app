@@ -389,7 +389,10 @@ export function defineEffectsTools(registry: Registry, store: StudioStore): void
       const blobUrl = URL.createObjectURL(pngBlob);
       const frameId = store.getState().addFrame({ time: capturedAt, kind: 'upscaled', width: finalWidth, height: finalHeight, sourceFrameId, blobUrl });
       const { persistFrame } = await import('../../store/frames');
-      await persistFrame({ id: frameId, time: capturedAt, kind: 'upscaled', width: finalWidth, height: finalHeight, sourceFrameId, blob: pngBlob });
+      const { tryPersist } = await import('../../store/persist');
+      await tryPersist(store.getState(), () =>
+        persistFrame({ id: frameId, time: capturedAt, kind: 'upscaled', width: finalWidth, height: finalHeight, sourceFrameId, blob: pngBlob }),
+      );
 
       return { ok: true, summary: `Upscaled to ${finalWidth}x${finalHeight}`, frameId, width: finalWidth, height: finalHeight };
     },

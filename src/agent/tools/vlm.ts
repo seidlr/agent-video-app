@@ -7,6 +7,7 @@ import type { BoxSource } from '../../lib/types';
 import { parseTime, secsToTimecode } from '../../lib/time';
 import { getVideoElement } from '../../lib/videoElement';
 import { persistBox } from '../../store/boxes';
+import { tryPersist } from '../../store/persist';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
 
@@ -273,7 +274,9 @@ export function defineVlmTools(registry: Registry, store: StudioStore): void {
       const boxIds = await Promise.all(
         result.boxes.map(async (b) => {
           const boxId = store.getState().addBox({ time: capturedAt, x: b.box.x, y: b.box.y, w: b.box.w, h: b.box.h, label: b.label, source });
-          await persistBox({ id: boxId, time: capturedAt, x: b.box.x, y: b.box.y, w: b.box.w, h: b.box.h, label: b.label, source });
+          await tryPersist(store.getState(), () =>
+            persistBox({ id: boxId, time: capturedAt, x: b.box.x, y: b.box.y, w: b.box.w, h: b.box.h, label: b.label, source }),
+          );
           return boxId;
         }),
       );
@@ -374,7 +377,9 @@ export function defineVlmTools(registry: Registry, store: StudioStore): void {
 
       const source: BoxSource = 'ground';
       const boxId = store.getState().addBox({ time: capturedAt, x: firstBox.box.x, y: firstBox.box.y, w: firstBox.box.w, h: firstBox.box.h, label: args.phrase, source });
-      await persistBox({ id: boxId, time: capturedAt, x: firstBox.box.x, y: firstBox.box.y, w: firstBox.box.w, h: firstBox.box.h, label: args.phrase, source });
+      await tryPersist(store.getState(), () =>
+        persistBox({ id: boxId, time: capturedAt, x: firstBox.box.x, y: firstBox.box.y, w: firstBox.box.w, h: firstBox.box.h, label: args.phrase, source }),
+      );
 
       return { ok: true, summary: `Grounded "${args.phrase}" at ${secsToTimecode(capturedAt)}`, boxId, box: firstBox.box };
     },

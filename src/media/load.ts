@@ -1,6 +1,7 @@
 import { DEFAULT_PROJECT_ID } from '../lib/types';
 import type { StudioState, StudioStore } from '../store/studio';
 import { getLastSource, readLibraryFile, saveLastSource } from '../store/library';
+import { tryPersist } from '../store/persist';
 import { defaultSourceDeps, resolveSource, type SourceRequest } from './source';
 
 /**
@@ -13,11 +14,11 @@ import { defaultSourceDeps, resolveSource, type SourceRequest } from './source';
  * main.tsx can restore it on the next app boot without the user re-selecting it from the Library
  * (Task 3 DoD: "plays after a full page reload without re-selecting it").
  */
-export async function loadSource(store: Pick<StudioState, 'setSource'>, request: SourceRequest): Promise<void> {
+export async function loadSource(store: Pick<StudioState, 'setSource' | 'storage' | 'setStorageState'>, request: SourceRequest): Promise<void> {
   const deps = defaultSourceDeps(readLibraryFile);
   const resolved = await resolveSource(request, deps);
   store.setSource(resolved);
-  await saveLastSource(DEFAULT_PROJECT_ID, request);
+  await tryPersist(store, () => saveLastSource(DEFAULT_PROJECT_ID, request));
 }
 
 /**

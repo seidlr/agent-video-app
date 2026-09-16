@@ -5,6 +5,7 @@ import { buildSrtString } from '../lib/exports/srt';
 import type { ExportContext } from '../lib/exports/types';
 import type { CapturedFrame } from '../lib/types';
 import { persistFrame } from '../store/frames';
+import { tryPersist } from '../store/persist';
 import type { FrameEntry, StudioStore } from '../store/studio';
 
 /** One frame's zip-relative metadata -- everything `restoreFrames`-equivalent import logic needs
@@ -156,7 +157,9 @@ export async function applyImportedProject(store: StudioStore, parsed: ParsedPro
   for (const meta of manifest.frames) {
     const blob = frameBlobs.get(meta.id);
     if (!blob) continue;
-    await persistFrame({ id: meta.id, time: meta.time, kind: meta.kind, width: meta.width, height: meta.height, downloadedAs: meta.downloadedAs, blob });
+    await tryPersist(store.getState(), () =>
+      persistFrame({ id: meta.id, time: meta.time, kind: meta.kind, width: meta.width, height: meta.height, downloadedAs: meta.downloadedAs, blob }),
+    );
     frameEntries.push({ id: meta.id, time: meta.time, kind: meta.kind, width: meta.width, height: meta.height, downloadedAs: meta.downloadedAs, blobUrl: URL.createObjectURL(blob) });
   }
   store.getState().setFrames(frameEntries);

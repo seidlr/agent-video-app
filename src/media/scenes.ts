@@ -3,6 +3,8 @@ import { chi2, dhash64, hamming, quantizeHist } from './dhash';
 import { getInput } from './input';
 import type { ResolvedSource } from './source';
 import { getPersistedHashes, persistHashes } from '../store/hashes';
+import { tryPersist } from '../store/persist';
+import type { StudioState } from '../store/studio';
 
 /** Downscaled decode target for scene-detection/similarity sampling -- coarse enough to be cheap
  * for every sampled frame of a long video, matching the plan's own Key Decisions exactly. */
@@ -253,7 +255,7 @@ function cacheKey(source: ResolvedSource): string {
  * same as media/input.ts's own Input cache and store/frames.ts's persistence pattern) and a fresh
  * `sampleFramesForAnalysis` decode when neither has it yet.
  */
-export async function ensureFrameSamples(source: ResolvedSource): Promise<FrameSample[]> {
+export async function ensureFrameSamples(source: ResolvedSource, state: Pick<StudioState, 'storage' | 'setStorageState'>): Promise<FrameSample[]> {
   const key = cacheKey(source);
   const cached = sampleCache.get(key);
   if (cached) return cached;
@@ -268,6 +270,6 @@ export async function ensureFrameSamples(source: ResolvedSource): Promise<FrameS
 
   const samples = await sampleFramesForAnalysis(source);
   sampleCache.set(key, samples);
-  if (source.assetId) await persistHashes(source.assetId, samples);
+  if (source.assetId) await tryPersist(state, () => persistHashes(source.assetId!, samples));
   return samples;
 }
