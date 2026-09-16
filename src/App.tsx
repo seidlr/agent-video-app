@@ -66,12 +66,14 @@ function PanelBody({ panel }: { panel: PanelId }): ReactElement {
 export function App(): ReactElement {
   const source = useStudio((s) => s.source);
   const panel = useStudio((s) => s.ui.panel);
+  const layout = useStudio((s) => s.ui.layout);
   const setView = useStudio((s) => s.setView);
+  const compact = layout === 'focus';
 
   return (
     <div className="flex h-screen flex-col bg-bg text-ink">
       <TopBar />
-      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 gap-0 px-5 pb-5">
+      <div className={`mx-auto flex min-h-0 w-full flex-1 gap-0 pb-5 ${compact ? 'px-2' : 'max-w-[1440px] px-5'}`}>
         <main className="flex min-w-0 flex-1 flex-col gap-3.5 py-4">
           {source ? (
             <VideoStage />
@@ -81,23 +83,30 @@ export function App(): ReactElement {
             </div>
           )}
         </main>
-        <aside className="flex w-[392px] flex-none flex-col border-l border-line bg-surface">
-          <div className="flex flex-wrap gap-0.5 px-3 pt-2.5">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setView(tab.id)}
-                className={`rounded-t-md px-2.5 py-1.5 font-mono text-[10.5px] ${panel === tab.id ? 'border border-b-0 border-line bg-bg text-ink' : 'text-ink-3'}`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1 overflow-y-auto p-3.5">
-            <PanelBody panel={panel} />
-          </div>
-        </aside>
+        {/* Task 11/14's own "compact layout" gap: `set_view {layout:'focus'}` (any transport, and
+            src/agent/mcpApp.ts's own displayMode:'pip' handling) drops this 392px-wide side panel
+            entirely rather than trying to squeeze its tab bar + panel body into a real MCP App
+            PiP window's own much smaller footprint -- there's nowhere for it to reasonably go at
+            that size. `layout:'studio'` (the default) is unchanged. */}
+        {!compact && (
+          <aside className="flex w-[392px] flex-none flex-col border-l border-line bg-surface">
+            <div className="flex flex-wrap gap-0.5 px-3 pt-2.5">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setView(tab.id)}
+                  className={`rounded-t-md px-2.5 py-1.5 font-mono text-[10.5px] ${panel === tab.id ? 'border border-b-0 border-line bg-bg text-ink' : 'text-ink-3'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 overflow-y-auto p-3.5">
+              <PanelBody panel={panel} />
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );

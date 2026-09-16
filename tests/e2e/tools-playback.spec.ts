@@ -98,6 +98,24 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test('set_view {layout:"focus"} drops the side panel (Task 11/14 DoD: the "compact layout" gap)', async ({ page }) => {
+    await page.goto('/');
+    await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
+
+    // Studio layout (the default): the tab rail/side panel renders as its own landmark.
+    await expect(page.getByRole('complementary')).toBeVisible();
+
+    const focused = await execTool(page, 'set_view', { layout: 'focus' });
+    expect(focused).toMatchObject({ ok: true, summary: 'View: panel=activity, layout=focus' });
+    await expect(page.getByRole('complementary')).not.toBeVisible();
+    // The video stage itself is unaffected -- still there, just now with the full width to itself.
+    await expect(page.locator('[data-media-player]')).toBeVisible();
+
+    const studio = await execTool(page, 'set_view', { layout: 'studio' });
+    expect(studio).toMatchObject({ ok: true, summary: 'View: panel=activity, layout=studio' });
+    await expect(page.getByRole('complementary')).toBeVisible();
+  });
+
   // Isolated in its own describe so `retries` (below) applies only to this one flaky test, not
   // the other three reliable ones in this file.
   test.describe('YouTube tool-set narrowing (a known, still-not-fully-resolved CI flake) @ci-quarantine', () => {

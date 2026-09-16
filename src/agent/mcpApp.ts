@@ -37,10 +37,22 @@ function extractDataUrl(value: unknown): DataUrlParts | undefined {
   return { mimeType: match[1]!, base64: match[2]! };
 }
 
-function applyHostContext(ctx: McpUiHostContext): void {
+/** Task 11/14's own "compact layout" gap: `displayMode:'pip'` (a real, small popped-out MCP App
+ * window -- confirmed via `McpUiHostContext`'s own type, `"inline"|"fullscreen"|"pip"`) switches
+ * the studio to `ui.layout:'focus'` (App.tsx drops its 392px-wide side panel entirely at that
+ * size); any other displayMode reverts to the normal `'studio'` layout. Reuses `set_view`'s own
+ * existing `setView` action/layout values rather than inventing a second, MCP-App-only layout
+ * flag, so an agent calling `set_view {layout:'focus'}` and a host reporting `displayMode:'pip'`
+ * drive the exact same rendering path. */
+function applyHostContext(ctx: McpUiHostContext, store: StudioStore): void {
   if (ctx.theme) applyDocumentTheme(ctx.theme);
   if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
   if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
+  if (ctx.displayMode) {
+    const layout = ctx.displayMode === 'pip' ? 'focus' : 'studio';
+    const current = store.getState().ui;
+    if (current.layout !== layout) store.getState().setView(current.panel, layout);
+  }
 }
 
 /**
@@ -70,7 +82,7 @@ export async function mountMcpApp(registry: Registry, store: StudioStore): Promi
     contextTimer = setTimeout(() => void pushModelContext(), CONTEXT_UPDATE_DEBOUNCE_MS);
   }
 
-  app.onhostcontextchanged = (ctx) => applyHostContext(ctx);
+  app.onhostcontextchanged = (ctx) => applyHostContext(ctx, store);
 
   app.ontoolresult = (result) => {
     const structured = result.structuredContent as { instanceId?: string; load?: Record<string, unknown> } | undefined;
@@ -90,7 +102,7 @@ export async function mountMcpApp(registry: Registry, store: StudioStore): Promi
 
   await app.connect();
   const initialContext = app.getHostContext();
-  if (initialContext) applyHostContext(initialContext);
+  if (initialContext) applyHostContext(initialContext, store);
 
   // TS-009 step 7: "storage probe result logged". Best-effort and non-blocking -- the app renders
   // and every tool still works (just non-persistently) if this comes back false.
