@@ -161,17 +161,46 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
       // once load_video resolves -- poll rather than snapshot listToolNames() once.
       await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).toContain('step_frames');
 
-      const toolchangeCount = await page.evaluate(async (id) => {
-        let count = 0;
-        document.modelContext!.addEventListener('toolchange', () => {
-          count++;
-        });
-        await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
-        return count;
-      }, 'jNQXAC9IVRw');
-      expect(toolchangeCount).toBeGreaterThan(0);
+      // TEMPORARY diagnostic instrumentation for the still-unresolved CI-only flake (see the
+      // plan's own Deviations section) -- an independent liveness probe, deliberately unrelated
+      // to modelContext/webmcp, firing on its own timer concurrently with the narrowing poll
+      // below. If this ALSO stalls, the whole renderer/CDP connection is frozen (points to a
+      // wedged shared GPU/browser process from earlier tests' real video decode work); if it
+      // keeps responding on schedule while only listToolNames() doesn't move, the freeze is
+      // scoped to the modelContext/webmcp registration path specifically. Revert once this run's
+      // data is in hand -- see the follow-up task this diagnostic run was spawned to inform.
+      let probeN = 0;
+      const probeLog: string[] = [];
+      const probeTimer = setInterval(() => {
+        const n = ++probeN;
+        const sentAt = Date.now();
+        page
+          .evaluate(() => ({
+            now: Date.now(),
+            heap: (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null,
+            iframes: document.querySelectorAll('iframe').length,
+          }))
+          .then((r) => probeLog.push(`[probe#${n}] ok rtt=${Date.now() - sentAt}ms heap=${r.heap} iframes=${r.iframes}`))
+          .catch((e) => probeLog.push(`[probe#${n}] FAILED rtt=${Date.now() - sentAt}ms err=${String(e)}`));
+      }, 2000);
 
-      await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).not.toContain('step_frames');
+      let toolchangeCount: number;
+      try {
+        toolchangeCount = await page.evaluate(async (id) => {
+          let count = 0;
+          document.modelContext!.addEventListener('toolchange', () => {
+            count++;
+          });
+          await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
+          return count;
+        }, 'jNQXAC9IVRw');
+        expect(toolchangeCount).toBeGreaterThan(0);
+
+        await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).not.toContain('step_frames');
+      } finally {
+        clearInterval(probeTimer);
+        console.log(`[probe] total=${probeN}\n${probeLog.join('\n')}`);
+      }
       // Every yt-unsafe local tool is gone, but every always tool is untouched.
       const withYoutube = await listToolNames(page);
       expect(withYoutube).toContain('get_state');

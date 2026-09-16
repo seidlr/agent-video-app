@@ -1,0 +1,52 @@
+name: Diagnose YouTube tool-narrowing flake (TEMPORARY)
+
+# One-off diagnostic workflow for the still-unresolved tools-playback.spec.ts CI flake -- see the
+# plan's own Deviations section (docs/plans/2026-09-14-agent-first-video-player.md). Deliberately
+# separate from deploy.yml: never builds or deploys anything, so a failure here has zero effect on
+# the real Pages site. workflow_dispatch only, on this diagnostic branch -- not wired to any push
+# trigger. Delete this file once the run's data has been captured and analyzed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chrome
+
+      # Isolated run: this test alone, first thing in a fresh CI job -- nothing else has touched
+      # the browser/GPU process yet. Tests the "warm process from prior heavy tests" hypothesis
+      # directly: if this fails too, order/accumulation isn't the (whole) story.
+      - name: E2E - isolated run (YouTube-narrowing test alone, first)
+        continue-on-error: true
+        run: npx playwright test tests/e2e/tools-playback.spec.ts --grep "YouTube tool-set narrowing"
+
+      # Normal order: the same full non-@ml/@build suite deploy.yml runs, so this test lands in
+      # its usual late position after the real video-encode/decode-heavy tests. Deliberately does
+      # NOT exclude @ci-quarantine, unlike deploy.yml -- we want it to actually run here. Carries
+      # the liveness-probe diagnostic added to the test itself (see its own comment).
+      - name: E2E - full suite, normal order (matches deploy.yml minus quarantine exclusion)
+        continue-on-error: true
+        run: npx playwright test --grep-invert "@ml|@build"
+
+      - name: Upload traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
