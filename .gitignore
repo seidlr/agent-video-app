@@ -1,5 +1,6 @@
 node_modules
 dist
+*.mcpb
 # Regenerated on every `npm run build` (or a direct `tsx scripts/build-skill.ts` run) from
 # skills/agent-video-studio/ + the live tool registry -- same "build output, not source" status
 # as dist/ itself, and would otherwise be pure diff noise (digests shift on every tool added).

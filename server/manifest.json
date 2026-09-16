@@ -1,0 +1,32 @@
+{
+  "manifest_version": "0.3",
+  "name": "agent-video-studio",
+  "display_name": "Agent Video Studio",
+  "version": "0.1.0",
+  "description": "An agent-first video player and editor: seek, capture, segment, transcribe, and take notes on a video through MCP tools and a rendered MCP App.",
+  "long_description": "Agent Video Studio is a front-end-only video player and editor built for an external agent to drive. This bundle runs the studio's MCP server over stdio: Claude Desktop renders the studio itself as an MCP App (open_video_studio), and every other tool (seek, capture_frame, segment, transcribe, add_note, export_video, ...) dispatches through an instance-bound command bus to whichever browser tab or MCP App view is currently active.",
+  "author": {
+    "name": "Robert Seidl",
+    "email": "robertseidl425@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seidlr/agent-video-app"
+  },
+  "homepage": "https://seidlr.github.io/agent-video-app/",
+  "keywords": ["video", "video-editor", "mcp-app", "webmcp", "agent"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/stdio.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/stdio.js"]
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20"
+    }
+  }
+}
