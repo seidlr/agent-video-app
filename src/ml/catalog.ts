@@ -289,6 +289,187 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     // plan's own "19 MB" figure.
     approxMB: 19,
   },
+  // Task 13: matting (background-removal), TTS, upscale, ASR tiers, translation. Every approxMB
+  // below is computed the same way as every entry above -- summed real byte counts from the live
+  // HF tree API for the exact files this dtype/task combo downloads (verified live via
+  // ModelRegistry.get_pipeline_files/get_files against the locally installed
+  // @huggingface/transformers@4.2.0, not guessed from a model card).
+  {
+    id: 'matte-portrait',
+    task: 'background-removal',
+    repo: 'Xenova/modnet',
+    dtype: 'uint8',
+    family: 'matte',
+    device: 'wasm', // uint8 is a CPU-oriented quantization, same convention as pyannote/mobileclip above
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/Xenova/modnet',
+    // Verified: onnx/model_uint8.onnx (6,627,048 B).
+    approxMB: 7,
+  },
+  {
+    id: 'matte-general',
+    task: 'background-removal',
+    repo: 'onnx-community/BiRefNet_lite-ONNX',
+    dtype: 'fp16',
+    family: 'matte',
+    device: 'webgpu',
+    license: 'MIT',
+    url: 'https://huggingface.co/onnx-community/BiRefNet_lite-ONNX',
+    // Verified: onnx/model_fp16.onnx (114,538,221 B).
+    approxMB: 115,
+  },
+  {
+    id: 'kokoro-tts',
+    // Loaded via the `kokoro-js` package's own `KokoroTTS.from_pretrained`, not transformers.js's
+    // `pipeline()` -- no real pipeline task exists for TTS here; cosmetic display label only.
+    task: 'text-to-speech',
+    repo: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+    // kokoro-js's own dtype enum is fp32|fp16|q8|q4|q4f16; 'q8' is the legacy alias that resolves
+    // to this repo's own "quantized" file (onnx/model_quantized.onnx) -- confirmed live via
+    // ModelRegistry.get_files({dtype:'q8'}), matching the plan's own "quantized ≈92MB" wording
+    // (the repo's own onnx/ directory also has separately-named uint8/int8 files at different
+    // sizes, so the dtype string, not just "any 8-bit variant", determines which file is fetched).
+    dtype: 'q8',
+    family: 'tts',
+    device: 'wasm',
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX',
+    // Verified: onnx/model_quantized.onnx (92,361,116 B).
+    approxMB: 92,
+    usesPipeline: false,
+  },
+  {
+    id: 'swin2sr-upscale',
+    task: 'image-to-image',
+    repo: 'onnx-community/swin2SR-realworld-sr-x4-64-bsrgan-psnr-ONNX',
+    dtype: 'q4f16',
+    family: 'upscale',
+    device: 'webgpu',
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/onnx-community/swin2SR-realworld-sr-x4-64-bsrgan-psnr-ONNX',
+    // Verified: onnx/model_q4f16.onnx (15,249,949 B).
+    approxMB: 15,
+  },
+  {
+    id: 'whisper-turbo',
+    task: 'automatic-speech-recognition',
+    repo: 'onnx-community/whisper-large-v3-turbo',
+    // A per-submodule dtype DICT ({encoder_model:'q4f16', decoder_model_merged:'q4f16'}, the same
+    // shape whisper-tiny/whisper-base above use) resolves the wrong files for THIS repo -- verified
+    // live: it silently falls back to the full-precision encoder_model.onnx (+ .onnx_data), not
+    // encoder_model_q4f16.onnx. A single dtype STRING applies q4f16 uniformly to every submodule
+    // and resolves correctly (get_pipeline_files confirmed: onnx/encoder_model_q4f16.onnx +
+    // onnx/decoder_model_merged_q4f16.onnx) -- used here instead, a real, repo-specific gotcha, not
+    // a stylistic preference.
+    dtype: 'q4f16',
+    family: 'asr',
+    device: 'webgpu',
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/onnx-community/whisper-large-v3-turbo',
+    // Verified: onnx/encoder_model_q4f16.onnx (369,974,078 B) + onnx/decoder_model_merged_q4f16.onnx
+    // (193,505,017 B) = 563,479,095 B, matching the plan's own "≈564MB" figure almost exactly.
+    approxMB: 563,
+  },
+  {
+    id: 'moonshine-base',
+    // Dispatched by the standard AutomaticSpeechRecognitionPipeline itself (a dedicated
+    // `_call_moonshine` branch keyed on `model.config.model_type === 'moonshine'`, confirmed by
+    // reading pipelines/automatic-speech-recognition.js directly) -- a real pipeline task, unlike
+    // Kokoro/Florence-2/VLM above. Returns only `{text}`, no chunk-level timestamps at all (no
+    // `chunk_length_s`/`return_timestamps` support) -- transcribe.worker.ts branches on this at
+    // runtime via the same `model.config.model_type` check, per its own module doc comment.
+    task: 'automatic-speech-recognition',
+    repo: 'onnx-community/moonshine-base-ONNX',
+    dtype: 'q4f16',
+    family: 'asr',
+    device: 'webgpu',
+    license: 'MIT',
+    url: 'https://huggingface.co/onnx-community/moonshine-base-ONNX',
+    // Verified: onnx/encoder_model_q4f16.onnx (16,638,074 B) + onnx/decoder_model_merged_q4f16.onnx
+    // (85,089,526 B) = 101,727,600 B.
+    approxMB: 102,
+  },
+  // opus-mt: one catalog id per language pair (translate_transcript's own `to` argument selects
+  // one of these by src/dest language, no other mapping). All six pairs the plan names exist under
+  // onnx-community (confirmed live, no Xenova/* fallback needed). Reversed pairs (en-de/de-en,
+  // en-es/es-en, en-fr/fr-en) happen to share identical file sizes with their own reverse --
+  // verified independently for all six repos, not assumed from one direction.
+  {
+    id: 'opus-mt-en-de',
+    task: 'translation',
+    repo: 'onnx-community/opus-mt-en-de',
+    dtype: 'q4f16',
+    family: 'translate',
+    device: 'webgpu',
+    license: 'CC-BY-4.0',
+    url: 'https://huggingface.co/onnx-community/opus-mt-en-de',
+    // Verified: onnx/encoder_model_q4f16.onnx (70,844,907 B) + onnx/decoder_model_merged_q4f16.onnx
+    // (147,715,759 B) = 218,560,666 B. (Below the plan's own "≈240MB" estimate -- that figure fits
+    // an fp16-encoder combination better; q4f16/q4f16 is smaller and still correctly resolved.)
+    approxMB: 219,
+  },
+  {
+    id: 'opus-mt-de-en',
+    task: 'translation',
+    repo: 'onnx-community/opus-mt-de-en',
+    dtype: 'q4f16',
+    family: 'translate',
+    device: 'webgpu',
+    license: 'CC-BY-4.0',
+    url: 'https://huggingface.co/onnx-community/opus-mt-de-en',
+    // Verified: identical file sizes to opus-mt-en-de above (218,560,666 B).
+    approxMB: 219,
+  },
+  {
+    id: 'opus-mt-en-es',
+    task: 'translation',
+    repo: 'onnx-community/opus-mt-en-es',
+    dtype: 'q4f16',
+    family: 'translate',
+    device: 'webgpu',
+    license: 'CC-BY-4.0',
+    url: 'https://huggingface.co/onnx-community/opus-mt-en-es',
+    // Verified: onnx/encoder_model_q4f16.onnx (77,910,507 B) + onnx/decoder_model_merged_q4f16.onnx
+    // (161,874,559 B) = 239,785,066 B, matching the plan's own "≈240MB" figure almost exactly.
+    approxMB: 240,
+  },
+  {
+    id: 'opus-mt-es-en',
+    task: 'translation',
+    repo: 'onnx-community/opus-mt-es-en',
+    dtype: 'q4f16',
+    family: 'translate',
+    device: 'webgpu',
+    license: 'CC-BY-4.0',
+    url: 'https://huggingface.co/onnx-community/opus-mt-es-en',
+    // Verified: identical file sizes to opus-mt-en-es above (239,785,066 B).
+    approxMB: 240,
+  },
+  {
+    id: 'opus-mt-en-fr',
+    task: 'translation',
+    repo: 'onnx-community/opus-mt-en-fr',
+    dtype: 'q4f16',
+    family: 'translate',
+    device: 'webgpu',
+    license: 'CC-BY-4.0',
+    url: 'https://huggingface.co/onnx-community/opus-mt-en-fr',
+    // Verified: onnx/encoder_model_q4f16.onnx (72,291,819 B) + onnx/decoder_model_merged_q4f16.onnx
+    // (150,615,235 B) = 222,907,054 B.
+    approxMB: 223,
+  },
+  {
+    id: 'opus-mt-fr-en',
+    task: 'translation',
+    repo: 'onnx-community/opus-mt-fr-en',
+    dtype: 'q4f16',
+    family: 'translate',
+    device: 'webgpu',
+    license: 'CC-BY-4.0',
+    url: 'https://huggingface.co/onnx-community/opus-mt-fr-en',
+    // Verified: identical file sizes to opus-mt-en-fr above (222,907,054 B).
+    approxMB: 223,
+  },
 ];
 
 export function getCatalogEntry(id: string): ModelCatalogEntry | undefined {
@@ -320,4 +501,27 @@ export type VlmTier = 'fast' | 'default' | 'quality';
  * catalog id -- always `vlm-<tier>`, no other mapping exists anywhere else. */
 export function resolveVlmId(tier: VlmTier | undefined): string {
   return `vlm-${tier ?? 'default'}`;
+}
+
+export type TranscribeTier = 'tiny' | 'base' | 'turbo' | 'moonshine';
+
+/** Task 13: `transcribe`'s own `model?: tiny|base|turbo|moonshine` argument maps to a catalog id
+ * through this one function -- `moonshine` is its own architecture (`moonshine-base`), not a
+ * `whisper-` prefix, so (unlike `resolveVlmId`'s uniform prefix) this is a real per-tier table. */
+const TRANSCRIBE_TIER_TO_MODEL_ID: Record<TranscribeTier, string> = {
+  tiny: 'whisper-tiny',
+  base: 'whisper-base',
+  turbo: 'whisper-turbo',
+  moonshine: 'moonshine-base',
+};
+
+export function resolveTranscribeId(tier: TranscribeTier | undefined): string {
+  return TRANSCRIBE_TIER_TO_MODEL_ID[tier ?? 'tiny'];
+}
+
+/** Task 13: `translate_transcript`'s `to`/`from` language pair maps to a catalog id -- only the
+ * six pairs the plan names (`en`<->`de`/`es`/`fr`) exist in the catalog; anything else is the
+ * caller's job to reject with a clear error before ever calling this. */
+export function resolveTranslateId(from: string, to: string): string | undefined {
+  return getCatalogEntry(`opus-mt-${from}-${to}`)?.id;
 }

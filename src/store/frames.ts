@@ -28,6 +28,7 @@ export async function restoreFrames(store: StudioStore): Promise<void> {
       width: row.width,
       height: row.height,
       downloadedAs: row.downloadedAs,
+      sourceFrameId: row.sourceFrameId,
       blobUrl: URL.createObjectURL(row.blob),
     })),
   );

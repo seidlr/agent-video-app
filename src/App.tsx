@@ -10,6 +10,7 @@ import { Tracking } from './components/Panels/Tracking';
 import { Vision } from './components/Panels/Vision';
 import { Transcript } from './components/Panels/Transcript';
 import { Clips } from './components/Panels/Clips';
+import { Effects } from './components/Panels/Effects';
 import { Skill } from './components/Panels/Skill';
 import { useStudio } from './store/studio';
 import type { PanelId } from './store/studio';
@@ -23,6 +24,7 @@ const TABS: { id: PanelId; label: string }[] = [
   { id: 'vision', label: 'Vision' },
   { id: 'transcript', label: 'Transcript' },
   { id: 'clips', label: 'Clips' },
+  { id: 'effects', label: 'Effects' },
   { id: 'models', label: 'Models' },
   { id: 'skill', label: 'Skill' },
 ];
@@ -52,6 +54,8 @@ function PanelBody({ panel }: { panel: PanelId }): ReactElement {
       return <Transcript />;
     case 'clips':
       return <Clips />;
+    case 'effects':
+      return <Effects />;
     case 'skill':
       return <Skill />;
     default:

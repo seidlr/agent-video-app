@@ -15,6 +15,12 @@ import type { AutomaticSpeechRecognitionOutput, AutomaticSpeechRecognitionPipeli
 import { getCatalogEntry, type ModelDevice } from './catalog';
 import { loadTransformers } from './transformersCdn';
 
+// Same rate media/audio.ts's own extractAudioPcm always extracts at (its own AUDIO_SAMPLE_RATE) --
+// duplicated as a literal rather than imported so this worker's tsconfig project doesn't pull in
+// media/source.ts's transitively-reachable `import.meta.env` usage, which tsconfig.worker.json
+// doesn't have Vite's client types for (a real, pre-existing gap, out of this task's scope to fix).
+const TRANSCRIBE_SAMPLE_RATE = 16000;
+
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 
 const CHUNK_LENGTH_S = 30;
@@ -65,8 +71,24 @@ function attachWords(segments: TranscribedSegment[], wordChunks: WhisperChunk[])
   }
 }
 
+/** Moonshine (Task 13) is dispatched by the same `AutomaticSpeechRecognitionPipeline` but through
+ * its own `_call_moonshine` branch (confirmed by reading pipelines/automatic-speech-recognition.js
+ * directly): it accepts no `chunk_length_s`/`stride_length_s`/`return_timestamps` at all and
+ * returns only `{text}` -- no per-chunk timestamps, so a moonshine transcription is always exactly
+ * one segment spanning the whole clip. Checking `model.config.model_type` (the same field the
+ * pipeline itself switches on) at runtime, rather than a separate catalog flag, means this stays
+ * correct even if a future catalog id changes without this file being touched. */
+function isMoonshineModel(): boolean {
+  return (transcriber?.model.config as { model_type?: string } | undefined)?.model_type === 'moonshine';
+}
+
 async function transcribe(samples: Float32Array, language: string | undefined): Promise<{ segments: TranscribedSegment[] }> {
   if (!transcriber) throw new Error('model_not_loaded: call load first');
+
+  if (isMoonshineModel()) {
+    const result = (await transcriber(samples)) as AutomaticSpeechRecognitionOutput;
+    return { segments: [{ start: 0, end: samples.length / TRANSCRIBE_SAMPLE_RATE, text: result.text.trim() }] };
+  }
 
   const result = (await transcriber(samples, {
     chunk_length_s: CHUNK_LENGTH_S,

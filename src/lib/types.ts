@@ -86,10 +86,14 @@ export interface Clip {
 export interface CapturedFrame {
   id: string;
   time: number;
-  kind: 'frame' | 'depth' | 'contact-sheet';
+  kind: 'frame' | 'depth' | 'contact-sheet' | 'upscaled';
   width: number;
   height: number;
   downloadedAs?: string;
+  /** For `kind:'upscaled'`: the frame it was upscaled from, per the plan's own "source frame id
+   * kept" Key Decision -- lets the Frames panel show "upscaled from <time>" instead of just a
+   * bare badge. */
+  sourceFrameId?: string;
 }
 
 export type ToolCallStatus = 'running' | 'done' | 'error';
@@ -104,6 +108,33 @@ export interface ToolCall {
   endedAt?: number;
   result?: unknown;
   error?: string;
+}
+
+export type MatteReplace = 'transparent' | 'color' | 'blur';
+
+export interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+export interface Effect {
+  id: string;
+  kind: 'matte';
+  start: number;
+  end: number;
+  model: string;
+  replace: MatteReplace;
+  color?: RgbColor;
+}
+
+export interface Voiceover {
+  id: string;
+  at: number;
+  durationSeconds: number;
+  text: string;
+  voice: string;
+  blob: Blob;
 }
 
 export type JobStatus = 'running' | 'done' | 'failed' | 'cancelled';

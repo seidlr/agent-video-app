@@ -1,7 +1,7 @@
 import { createStore as createVanillaStore } from 'zustand/vanilla';
 import { useStore } from 'zustand/react';
 import { detectCapabilities, type Capabilities } from '../lib/capabilities';
-import type { Box, CapturedFrame, Chapter, Clip, Note, ToolCall, Track, TranscriptSegment } from '../lib/types';
+import type { Box, CapturedFrame, Chapter, Clip, Effect, Note, ToolCall, Track, TranscriptSegment, Voiceover } from '../lib/types';
 import type { ResolvedSource } from '../media/source';
 import type { Scene } from '../media/scenes';
 
@@ -154,6 +154,12 @@ export interface StudioState {
    * [0,1] + z + visibility), or `null` once nothing has been detected yet -- Stage/PoseOverlay.tsx
    * reads this reactively to draw the skeleton, the same way BoxOverlay reads `boxes`. */
   poseLandmarks: { x: number; y: number; z: number; visibility: number }[] | null;
+  /** Task 13: applied `remove_background` calls, shown as chips on their clip and used by the
+   * stage preview toggle and export.ts's own `video.process(sample)` compositing pass. */
+  effects: Effect[];
+  /** Task 13: `generate_voiceover` clips, drawn on the timeline by Timeline/VoiceoverClips.tsx and
+   * mixed into exports (media/audioMix.ts) when any exist. */
+  voiceovers: Voiceover[];
 
   setSource(source: ResolvedSource | null): void;
   /** Patches the current source's `thumbnailsVttUrl` in place, so a locally-generated sprite
@@ -222,6 +228,16 @@ export interface StudioState {
   setModelState(id: string, patch: Partial<ModelState>): void;
   setBoxDrawMode(on: boolean): void;
   setPoseLandmarks(landmarks: StudioState['poseLandmarks']): void;
+
+  addEffect(input: Omit<Effect, 'id'>): string;
+  removeEffect(id: string): void;
+  /** Wholesale-replaces `effects` -- same project-restore/import use as `setNotes`. */
+  setEffects(effects: Effect[]): void;
+
+  addVoiceover(input: Omit<Voiceover, 'id'>): string;
+  removeVoiceover(id: string): void;
+  /** Wholesale-replaces `voiceovers` -- same project-restore/import use as `setNotes`. */
+  setVoiceovers(voiceovers: Voiceover[]): void;
 
   /** Replaces the whole in-memory transcript for `lang` (`null` = the original). `transcribe`
    * (agent/tools/transcript.ts) reads the existing segments first and merges a re-transcribed
@@ -312,6 +328,8 @@ export function createStudioStore() {
     models: {},
     boxDrawMode: false,
     poseLandmarks: null,
+    effects: [],
+    voiceovers: [],
 
     setSource(asset) {
       set({ source: asset });
@@ -466,6 +484,30 @@ export function createStudioStore() {
     },
     setPoseLandmarks(landmarks) {
       set({ poseLandmarks: landmarks });
+    },
+
+    addEffect(input) {
+      const id = nextId('effect');
+      set((s) => ({ effects: [...s.effects, { ...input, id }] }));
+      return id;
+    },
+    removeEffect(id) {
+      set((s) => ({ effects: s.effects.filter((e) => e.id !== id) }));
+    },
+    setEffects(effects) {
+      set({ effects });
+    },
+
+    addVoiceover(input) {
+      const id = nextId('voiceover');
+      set((s) => ({ voiceovers: [...s.voiceovers, { ...input, id }] }));
+      return id;
+    },
+    removeVoiceover(id) {
+      set((s) => ({ voiceovers: s.voiceovers.filter((v) => v.id !== id) }));
+    },
+    setVoiceovers(voiceovers) {
+      set({ voiceovers });
     },
 
     addClip(input) {

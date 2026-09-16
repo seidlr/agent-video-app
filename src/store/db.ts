@@ -18,11 +18,12 @@ export interface FrameRow {
   id: string;
   projectId: string;
   time: number;
-  kind: 'frame' | 'depth' | 'contact-sheet';
+  kind: 'frame' | 'depth' | 'contact-sheet' | 'upscaled';
   width: number;
   height: number;
   blob: Blob;
   downloadedAs?: string;
+  sourceFrameId?: string;
   createdAt: number;
 }
 

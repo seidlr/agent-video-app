@@ -8,6 +8,7 @@ import { defineAudioTools } from './tools/audio';
 import { defineBoxesTools } from './tools/boxes';
 import { defineChaptersTools } from './tools/chapters';
 import { defineClipsTools } from './tools/clips';
+import { defineEffectsTools } from './tools/effects';
 import { defineExportsTools } from './tools/exports';
 import { defineFramesTools } from './tools/frames';
 import { defineLibraryTools } from './tools/library';
@@ -44,6 +45,7 @@ export function createAgentRegistry(store: StudioStore): Registry {
   defineTranscriptTools(registry, store);
   defineAudioTools(registry, store);
   defineVlmTools(registry, store);
+  defineEffectsTools(registry, store);
   return registry;
 }
 

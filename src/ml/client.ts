@@ -275,6 +275,14 @@ function spawnWorkerForFamily(family: ModelCatalogEntry['family']): Worker {
       return new Worker(new URL('./vlm.worker.ts', import.meta.url), { type: 'module' });
     case 'ocr':
       return new Worker(new URL('./florence.worker.ts', import.meta.url), { type: 'module' });
+    case 'matte':
+      return new Worker(new URL('./matting.worker.ts', import.meta.url), { type: 'module' });
+    case 'tts':
+      return new Worker(new URL('./tts.worker.ts', import.meta.url), { type: 'module' });
+    case 'upscale':
+      return new Worker(new URL('./upscale.worker.ts', import.meta.url), { type: 'module' });
+    case 'translate':
+      return new Worker(new URL('./translate.worker.ts', import.meta.url), { type: 'module' });
     default:
       throw new Error(`no_worker_for_family: ${family} (its worker file doesn't exist yet)`);
   }

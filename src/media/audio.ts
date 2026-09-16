@@ -19,6 +19,15 @@ export interface ExtractedAudio {
   sampleRate: number;
 }
 
+/** Decodes a Task 13 voice-over's own stored WAV blob (ml/tts.worker.ts's `RawAudio.toWav()`
+ * output) back to raw PCM -- shared by agent/tools/effects.ts (returning `durationSeconds` at
+ * generation time) and media/export.ts's own audioMix.ts pass, so a decode fix only needs to
+ * happen in one place. */
+export async function decodeVoiceoverPcm(blob: Blob): Promise<ExtractedAudio> {
+  const buffer = await blob.arrayBuffer();
+  return { samples: wavDataToFloat32(buffer), sampleRate: wavSampleRate(buffer) };
+}
+
 export interface ExtractAudioOptions {
   /** Trims the extraction to [start,end) seconds of the source, for range transcription
    * (`transcribe {from,to}`) and windowed audio-event tagging without decoding the whole file. */
@@ -47,6 +56,27 @@ export function wavDataToFloat32(buffer: ArrayBuffer): Float32Array {
     offset = dataStart + size + (size % 2);
   }
   throw new Error('invalid_wav: no data chunk found');
+}
+
+/** Same chunk walk as `wavDataToFloat32`, reading the `fmt ` chunk's own sample rate field
+ * instead -- used by Task 13's `generate_voiceover`/audioMix.ts pass so a Kokoro-generated
+ * voice-over's real encoded rate never needs to be hardcoded or re-derived elsewhere. */
+export function wavSampleRate(buffer: ArrayBuffer): number {
+  const view = new DataView(buffer);
+  if (view.getUint32(0, false) !== 0x52494646 /* 'RIFF' */ || view.getUint32(8, false) !== 0x57415645 /* 'WAVE' */) {
+    throw new Error('invalid_wav: missing RIFF/WAVE header');
+  }
+  let offset = 12;
+  while (offset + 8 <= view.byteLength) {
+    const id = String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+    const size = view.getUint32(offset + 4, true);
+    const dataStart = offset + 8;
+    if (id === 'fmt ') {
+      return view.getUint32(dataStart + 4, true); // fmt chunk layout: format(2) channels(2) sampleRate(4) ...
+    }
+    offset = dataStart + size + (size % 2);
+  }
+  throw new Error('invalid_wav: no fmt chunk found');
 }
 
 /** Reads the whole source's raw bytes -- only needed by the decodeAudioData fallback below, which

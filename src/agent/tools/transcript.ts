@@ -1,5 +1,6 @@
 import { extractAudioPcm } from '../../media/audio';
 import { mlClient } from '../../ml/client';
+import { resolveTranscribeId, resolveTranslateId, type TranscribeTier } from '../../ml/catalog';
 import { buildSrtString } from '../../lib/exports/srt';
 import { parseTime, secsToTimecode } from '../../lib/time';
 import type { TranscriptSegment } from '../../lib/types';
@@ -7,11 +8,6 @@ import { buildVttString } from '../../lib/vtt';
 import { getPersistedTranscript, persistTranscript } from '../../store/transcript';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
-
-/** `transcribe`'s tier -> catalog id map. Only `tiny`/`base` exist yet -- `turbo` (accuracy tier)
- * and `moonshine` (short-range, no 30s padding) are Task 13's own additions to this same map,
- * per the plan's "Modify: ml/catalog.ts, transcribe.worker.ts (tiers tiny|base|turbo|moonshine)". */
-const TIER_TO_MODEL_ID: Record<'tiny' | 'base', string> = { tiny: 'whisper-tiny', base: 'whisper-base' };
 
 interface WorkerTranscribeResult {
   segments: TranscriptSegment[];
@@ -31,7 +27,7 @@ function mergeSegments(existing: TranscriptSegment[], from: number, to: number, 
 }
 
 type TranscribeArgs = {
-  model?: 'tiny' | 'base';
+  model?: TranscribeTier;
   from?: string | number;
   to?: string | number;
   language?: string;
@@ -56,11 +52,11 @@ export function defineTranscriptTools(registry: Registry, store: StudioStore): v
   registry.define<TranscribeArgs>({
     name: 'transcribe',
     description:
-      "Transcribes the video's audio with Whisper, adding timestamped segments to the transcript. First call without confirmDownload to see the model size. Omit from/to to transcribe the whole video; a partial range replaces only the overlapping segments.",
+      'Transcribes the video\'s audio, adding timestamped segments to the transcript. Tiers: tiny/base (fast, default), turbo (Whisper large-v3-turbo, most accurate), moonshine (best for a short range, no chunking/timestamps). First call without confirmDownload to see the model size. Omit from/to to transcribe the whole video; a partial range replaces only the overlapping segments.',
     inputSchema: {
       type: 'object',
       properties: {
-        model: { type: 'string', enum: ['tiny', 'base'] },
+        model: { type: 'string', enum: ['tiny', 'base', 'turbo', 'moonshine'] },
         from: { type: ['string', 'number'] },
         to: { type: ['string', 'number'] },
         language: { type: 'string' },
@@ -83,7 +79,7 @@ export function defineTranscriptTools(registry: Registry, store: StudioStore): v
       if (from === null || to === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
       if (to <= from) return { ok: false, error: 'invalid_range', hint: '`to` must be after `from`.' };
 
-      const modelId = TIER_TO_MODEL_ID[args.model ?? 'tiny'];
+      const modelId = resolveTranscribeId(args.model);
       const ensured = await mlClient.ensureModel(modelId, {
         confirmDownload: args.confirmDownload,
         onProgress: (fraction) => store.getState().setModelState(modelId, { progress: fraction }),
@@ -196,6 +192,65 @@ export function defineTranscriptTools(registry: Registry, store: StudioStore): v
         }));
 
       return { ok: true, summary: `${hits.length} hit(s) for "${args.query}"`, hits };
+    },
+  });
+
+  const TRANSLATE_BATCH_SIZE = 8;
+
+  registry.define<{ to: string; from?: string; format?: 'segments' | 'srt' | 'vtt' | 'text'; confirmDownload?: boolean } & Record<string, unknown>>({
+    name: 'translate_transcript',
+    description:
+      'Translates the transcript to another language (en<->de/es/fr) and stores it alongside the original (get_transcript/search_transcript\'s own `lang` argument reads it back). First call without confirmDownload to see the model size.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', enum: ['de', 'en', 'es', 'fr'] },
+        from: { type: 'string', enum: ['de', 'en', 'es', 'fr'] },
+        format: { type: 'string', enum: ['segments', 'srt', 'vtt', 'text'] },
+        confirmDownload: { type: 'boolean' },
+      },
+      required: ['to'],
+    },
+    group: 'transcript',
+    when: 'after-transcribe',
+    mode: 'job',
+    handler: async (args): Promise<ToolResult> => {
+      const state = store.getState();
+      const from = args.from ?? 'en';
+      if (from === args.to) return { ok: false, error: 'invalid_language_pair', hint: '`from` and `to` must differ.' };
+
+      const segments =
+        state.transcript.lang === null ? state.transcript.segments : (state.source?.assetId ? ((await getPersistedTranscript(state.source.assetId, null)) ?? []) : []);
+      if (segments.length === 0) return { ok: false, error: 'no_transcript', hint: 'call transcribe first' };
+
+      const modelId = resolveTranslateId(from, args.to);
+      if (!modelId) return { ok: false, error: 'unsupported_language_pair', hint: `no translation model for ${from}->${args.to}; supported pairs: en<->de/es/fr` };
+
+      const ensured = await mlClient.ensureModel(modelId, {
+        confirmDownload: args.confirmDownload,
+        onProgress: (fraction) => store.getState().setModelState(modelId, { progress: fraction }),
+      });
+      if (!ensured.ok) {
+        if (ensured.error === 'unknown_model') return { ok: false, error: 'unknown_model', hint: `no model with id "${modelId}"` };
+        return { ok: false, error: ensured.error, hint: ensured.hint };
+      }
+      store.getState().setModelState(modelId, { loaded: true, cached: true, progress: 1 });
+
+      const translatedTexts: string[] = [];
+      for (let i = 0; i < segments.length; i += TRANSLATE_BATCH_SIZE) {
+        const batch = segments.slice(i, i + TRANSLATE_BATCH_SIZE).map((s) => s.text);
+        const result = await ensured.worker.call<{ texts: string[] }>('translate', { texts: batch });
+        translatedTexts.push(...result.texts);
+      }
+
+      const translated: TranscriptSegment[] = segments.map((s, i) => ({ start: s.start, end: s.end, text: translatedTexts[i] ?? s.text }));
+      if (state.source?.assetId) await persistTranscript(state.source.assetId, args.to, translated);
+
+      const format = args.format ?? 'segments';
+      if (format === 'srt') return { ok: true, summary: `Translated ${translated.length} segment(s) to ${args.to} (SRT)`, text: buildSrtString(translated) };
+      if (format === 'vtt') return { ok: true, summary: `Translated ${translated.length} segment(s) to ${args.to} (VTT)`, text: buildVttString(translated) };
+      if (format === 'text') return { ok: true, summary: `Translated ${translated.length} segment(s) to ${args.to}`, text: translated.map((s) => s.text).join(' ') };
+      return { ok: true, summary: `Translated ${translated.length} segment(s) to ${args.to}`, segments: translated };
     },
   });
 }

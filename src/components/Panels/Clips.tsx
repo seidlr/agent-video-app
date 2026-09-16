@@ -28,6 +28,8 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 export function Clips(): ReactElement {
   const clips = useStudio((s) => s.clips);
   const boxes = useStudio((s) => s.boxes);
+  const effects = useStudio((s) => s.effects);
+  const voiceovers = useStudio((s) => s.voiceovers);
   const player = useStudio((s) => s.player);
   const source = useStudio((s) => s.source);
   const seek = useStudio((s) => s.seek);
@@ -73,10 +75,15 @@ export function Clips(): ReactElement {
         format,
         burnOverlays,
         boxes,
+        effects,
+        voiceovers,
         onProgress: setExportProgress,
       });
-      triggerBlobDownload(result.blob, `agent-video-studio-export.${format}`);
-      setExportMessage(`Exported ${sorted.length} clip(s), ${result.durationSeconds.toFixed(1)}s, ${result.width}x${result.height}.`);
+      const actualFormat = result.forcedAlphaFormat ? 'webm' : format;
+      triggerBlobDownload(result.blob, `agent-video-studio-export.${actualFormat}`);
+      setExportMessage(
+        `Exported ${sorted.length} clip(s), ${result.durationSeconds.toFixed(1)}s, ${result.width}x${result.height}${result.forcedAlphaFormat ? ' (forced to WebM/VP9 for a transparent-background effect)' : ''}.`,
+      );
     } catch (err) {
       setExportMessage(err instanceof Error ? `Export failed: ${err.message}` : 'Export failed.');
     } finally {

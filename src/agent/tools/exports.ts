@@ -189,10 +189,13 @@ export function defineExportsTools(registry: Registry, store: StudioStore): void
           format: args.format,
           burnOverlays: args.burnOverlays,
           boxes: state.boxes,
+          effects: state.effects,
+          voiceovers: state.voiceovers,
           onProgress: (fraction) => ctx.progress(fraction),
         });
 
-        const filename = `${EXPORT_BASENAME}.${args.format === 'webm' ? 'webm' : 'mp4'}`;
+        const actualFormat = result.forcedAlphaFormat ? 'webm' : args.format === 'webm' ? 'webm' : 'mp4';
+        const filename = `${EXPORT_BASENAME}.${actualFormat}`;
         let downloadedAs: string | undefined;
         if (args.download !== false) {
           triggerBlobDownload(result.blob, filename);
@@ -201,13 +204,14 @@ export function defineExportsTools(registry: Registry, store: StudioStore): void
 
         return {
           ok: true,
-          summary: `Exported ${selected.length} clip(s), ${result.durationSeconds.toFixed(1)}s, ${result.width}x${result.height}${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}`,
+          summary: `Exported ${selected.length} clip(s), ${result.durationSeconds.toFixed(1)}s, ${result.width}x${result.height}${result.forcedAlphaFormat ? ' (forced to WebM/VP9 for a transparent-background effect)' : ''}${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}`,
           durationSeconds: result.durationSeconds,
           width: result.width,
           height: result.height,
           codec: result.codec,
           bytes: result.blob.size,
           downloadedAs,
+          forcedAlphaFormat: result.forcedAlphaFormat,
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
