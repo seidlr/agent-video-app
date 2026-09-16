@@ -12,16 +12,9 @@
  * {input_points|input_boxes})` -> `model(inputs)` -> `{iou_scores, pred_masks}` ->
  * `processor.post_process_masks(...)`.
  */
-import { AutoProcessor, EdgeTamModel, RawImage, SamModel, env } from '@huggingface/transformers';
 import type { PreTrainedModel, Processor, Tensor } from '@huggingface/transformers';
 import { getCatalogEntry } from './catalog';
-
-// Per the plan's Key Decisions: cache downloaded model files in the browser's own Cache Storage
-// (survives a reload without re-downloading) under a name scoped to this app, and cache compiled
-// wasm too.
-env.useBrowserCache = true;
-env.cacheKey = 'agent-video-studio-models';
-env.useWasmCache = true;
+import { loadTransformers } from './transformersCdn';
 
 /** `SamProcessor`/`Sam2Processor` (whichever `AutoProcessor.from_pretrained` resolves to for
  * these two models) both expose `post_process_masks`, but neither is part of the package's public
@@ -53,6 +46,7 @@ interface SegmentResult {
 async function loadModel(modelId: string, onProgress: (fraction: number) => void): Promise<void> {
   const entry = getCatalogEntry(modelId);
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
+  const { AutoProcessor, EdgeTamModel, SamModel } = await loadTransformers();
 
   const ModelClass = entry.device === 'webgpu' ? EdgeTamModel : SamModel;
   const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
@@ -109,6 +103,7 @@ function maskToNormalizedBox(maskData: ArrayLike<number>, width: number, height:
 
 async function segment(bitmap: ImageBitmap, prompt: SegmentPrompt): Promise<SegmentResult> {
   if (!model || !processor) throw new Error('model_not_loaded: call load first');
+  const { RawImage } = await loadTransformers();
 
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const ctx = canvas.getContext('2d');

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite-node scripts/run-build-skill.ts && vite-node scripts/run-build-server-manifest.ts && vite build",
+    "build:mcp-app": "vite build --config vite.mcp-app.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc --build --force",
     "lint": "eslint .",
@@ -15,14 +16,15 @@
     "make-fixture": "tsx scripts/make-fixture-video.ts",
     "mcp:dev": "tsx watch server/http.ts",
     "mcp:stdio": "tsx server/stdio.ts",
-    "mcp:bundle": "mcpb pack . agent-video-studio.mcpb"
+    "build:server": "vite-node scripts/run-build-server.ts",
+    "mcp:bundle": "npm run build:mcp-app && npm run build:server && mcpb pack server agent-video-studio.mcpb"
   },
   "dependencies": {
     "@huggingface/transformers": "4.2.0",
     "@mcp-b/global": "5.1.0",
     "@mediapipe/tasks-vision": "1.0.1",
-    "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/express": "2.0.0",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "@vidstack/react": "1.15.6",
@@ -51,6 +53,7 @@
     "@types/react": "19.0.10",
     "@types/react-dom": "19.0.4",
     "@vitejs/plugin-react": "4.3.4",
+    "esbuild": "0.25.12",
     "eslint": "9.22.0",
     "eslint-plugin-react-hooks": "5.2.0",
     "fake-indexeddb": "6.0.0",

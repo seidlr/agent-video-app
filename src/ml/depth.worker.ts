@@ -8,20 +8,17 @@
  * depth/disparity map -- LARGER raw values mean CLOSER to the camera, smaller values mean farther
  * away. `estimate_depth {format:'stats'}`'s `near`/`far`/`shotType` all key off that direction.
  */
-import { RawImage, env, pipeline } from '@huggingface/transformers';
 import type { DepthEstimationPipeline, Tensor } from '@huggingface/transformers';
 import { computeDepthStats, type DepthStats } from '../media/depthStats';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-
-env.useBrowserCache = true;
-env.cacheKey = 'agent-video-studio-models';
-env.useWasmCache = true;
+import { loadTransformers } from './transformersCdn';
 
 let depthEstimator: DepthEstimationPipeline | null = null;
 
 async function loadModel(modelId: string, device: ModelDevice, onProgress: (fraction: number) => void): Promise<void> {
   const entry = getCatalogEntry(modelId);
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
+  const { pipeline } = await loadTransformers();
 
   const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
     if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
@@ -76,6 +73,7 @@ export interface EstimateDepthResult {
 
 async function estimateDepth(bitmap: ImageBitmap, includeImage: boolean): Promise<EstimateDepthResult> {
   if (!depthEstimator) throw new Error('model_not_loaded: call load first');
+  const { RawImage } = await loadTransformers();
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('canvas_unavailable');

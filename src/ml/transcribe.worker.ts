@@ -11,13 +11,9 @@
  * text}]}>` -- `onnx-community/whisper-tiny`/`whisper-base` (Apache-2.0, derived from OpenAI's
  * own Apache-2.0-licensed Whisper checkpoints).
  */
-import { env, pipeline } from '@huggingface/transformers';
 import type { AutomaticSpeechRecognitionOutput, AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-
-env.useBrowserCache = true;
-env.cacheKey = 'agent-video-studio-models';
-env.useWasmCache = true;
+import { loadTransformers } from './transformersCdn';
 
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 
@@ -27,6 +23,7 @@ const STRIDE_LENGTH_S = 5;
 async function loadModel(modelId: string, device: ModelDevice, onProgress: (fraction: number) => void): Promise<void> {
   const entry = getCatalogEntry(modelId);
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
+  const { pipeline } = await loadTransformers();
 
   const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
     if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);

@@ -14,13 +14,9 @@
  * passes `target_sizes:null`) leaves the model's own raw normalized [0,1] box coordinates
  * untouched -- exactly this app's own normalized-box convention, confirmed rather than assumed.
  */
-import { env, pipeline } from '@huggingface/transformers';
 import type { ObjectDetectionOutput, ObjectDetectionPipeline, ZeroShotObjectDetectionOutput, ZeroShotObjectDetectionPipeline } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-
-env.useBrowserCache = true;
-env.cacheKey = 'agent-video-studio-models';
-env.useWasmCache = true;
+import { loadTransformers } from './transformersCdn';
 
 let closedSetDetector: ObjectDetectionPipeline | null = null;
 let zeroShotDetector: ZeroShotObjectDetectionPipeline | null = null;
@@ -28,6 +24,7 @@ let zeroShotDetector: ZeroShotObjectDetectionPipeline | null = null;
 async function loadModel(modelId: string, device: ModelDevice, onProgress: (fraction: number) => void): Promise<void> {
   const entry = getCatalogEntry(modelId);
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
+  const { pipeline } = await loadTransformers();
 
   const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
     if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);

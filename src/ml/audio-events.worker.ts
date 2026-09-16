@@ -10,13 +10,9 @@
  * ...)` model. Both models' `preprocessor_config.json` confirm `sampling_rate:16000`, matching
  * media/audio.ts's own fixed 16kHz PCM extraction exactly -- no resampling needed in this worker.
  */
-import { AutoModelForAudioFrameClassification, AutoProcessor, env, pipeline } from '@huggingface/transformers';
 import type { AudioClassificationPipeline, PreTrainedModel, Processor } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-
-env.useBrowserCache = true;
-env.cacheKey = 'agent-video-studio-models';
-env.useWasmCache = true;
+import { loadTransformers } from './transformersCdn';
 
 /** `PyAnnoteProcessor`'s own `post_process_speaker_diarization` isn't part of the package's public
  * type-level export surface to import and cast to directly (same situation as segment.worker.ts's
@@ -35,6 +31,7 @@ let audioClassifier: AudioClassificationPipeline | null = null;
 async function loadModel(modelId: string, device: ModelDevice, onProgress: (fraction: number) => void): Promise<void> {
   const entry = getCatalogEntry(modelId);
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
+  const { AutoModelForAudioFrameClassification, AutoProcessor, pipeline } = await loadTransformers();
 
   const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
     if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);

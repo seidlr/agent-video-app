@@ -12,13 +12,9 @@
  * DINOv3 has a real `pipeline('image-feature-extraction', ...)` task, whose own type declaration
  * literally uses `onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX` as its documented example.
  */
-import { AutoProcessor, AutoTokenizer, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, RawImage, env, pipeline } from '@huggingface/transformers';
 import type { ImageFeatureExtractionPipeline, PreTrainedModel, PreTrainedTokenizer, Processor, Tensor } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-
-env.useBrowserCache = true;
-env.cacheKey = 'agent-video-studio-models';
-env.useWasmCache = true;
+import { loadTransformers } from './transformersCdn';
 
 let clipTokenizer: PreTrainedTokenizer | null = null;
 let clipProcessor: Processor | null = null;
@@ -29,6 +25,7 @@ let dinoExtractor: ImageFeatureExtractionPipeline | null = null;
 async function loadModel(modelId: string, device: ModelDevice, onProgress: (fraction: number) => void): Promise<void> {
   const entry = getCatalogEntry(modelId);
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
+  const { AutoProcessor, AutoTokenizer, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, pipeline } = await loadTransformers();
 
   const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
     if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
@@ -72,6 +69,7 @@ async function embedText(query: string): Promise<Float32Array> {
 
 async function embedImage(bitmap: ImageBitmap): Promise<Float32Array> {
   if (!clipProcessor || !clipVisionModel) throw new Error('model_not_loaded: call load first');
+  const { RawImage } = await loadTransformers();
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('canvas_unavailable');
@@ -87,6 +85,7 @@ async function embedImage(bitmap: ImageBitmap): Promise<Float32Array> {
  * averages every non-CLS patch token into one vector representing the whole frame. */
 async function embedDino(bitmap: ImageBitmap): Promise<Float32Array> {
   if (!dinoExtractor) throw new Error('model_not_loaded: call load first');
+  const { RawImage } = await loadTransformers();
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('canvas_unavailable');

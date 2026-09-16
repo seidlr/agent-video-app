@@ -1,6 +1,6 @@
-import { ModelRegistry } from '@huggingface/transformers';
 import { detectCapabilities } from '../lib/capabilities';
 import { MODEL_CATALOG, type ModelCatalogEntry, type ModelDevice } from './catalog';
+import { loadTransformers } from './transformersCdn';
 
 /** One live model instance -- a thin wrapper the real implementation backs with a Worker, and
  * tests back with a fake. `ready` resolves once the model has actually finished loading in the
@@ -291,6 +291,7 @@ function createWorkerForEntry(entry: ModelCatalogEntry, onProgress: (fraction: n
 function createDefaultDeps(): ClientDeps {
   return {
     async isPipelineCached(entry) {
+      const { ModelRegistry } = await loadTransformers();
       if (entry.usesPipeline === false) {
         return ModelRegistry.is_cached(entry.repo, { dtype: entry.dtype, device: entry.device });
       }
@@ -298,6 +299,7 @@ function createDefaultDeps(): ClientDeps {
     },
     async getPipelineSizeMB(entry) {
       try {
+        const { ModelRegistry } = await loadTransformers();
         const files =
           entry.usesPipeline === false
             ? await ModelRegistry.get_files(entry.repo, { dtype: entry.dtype, device: entry.device })
