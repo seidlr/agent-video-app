@@ -49,7 +49,12 @@ jobs:
         # build-tagged scenarios (TS-008, tests/e2e/skill.spec.ts) need a production dist/ under
         # its real base path, which doesn't exist yet at this point in the pipeline -- run after
         # the Build step below instead.
-        run: npx playwright test --grep-invert "@ml|@build"
+        # ci-quarantine: tools-playback.spec.ts's own YouTube tool-narrowing test (a known,
+        # extensively-investigated, still-unresolved CI-only flake -- see its own module comment)
+        # was blocking every real deploy after Task 12, leaving the live site stale. Quarantined
+        # from this one gating job (a deliberate, user-approved trade-off, not a silent skip) --
+        # it still runs in every other context, including a plain local `npx playwright test`.
+        run: npx playwright test --grep-invert "@ml|@build|@ci-quarantine"
 
       - name: Build
         run: npm run build

@@ -69,11 +69,13 @@ segment, transcribe, ...) queue to whichever UI instance is currently active, an
 including `capture_frame` images -- flow back through the app.
 
 Verified: the bundle itself, built and unpacked into an isolated directory with zero dependency on
-this repo's own `node_modules`, correctly registers `open_video_studio` and all 65 data tools and
-serves the `ui://agent-video-studio/app.html` resource with the right mime type and byte-identical
-content to the built `dist/mcp-app.html` (`server/test/server.test.ts`, plus a manual live check
-during Task 11 -- see the plan's own Deviations entries). **Not yet verified**: an actual install
-inside a real Claude Desktop app (TS-009's own manual steps) -- see Unverified items.
+this repo's own `node_modules`, correctly registers `open_video_studio` and all 70 data tools (the
+count grows with each task; `tests/unit/agent-index.test.ts`'s own `EXPECTED_TOOL_NAMES` is the
+source of truth) and serves the `ui://agent-video-studio/app.html` resource with the right mime
+type and byte-identical content to the built `dist/mcp-app.html` (`server/test/server.test.ts`,
+plus a manual live check during Task 11 -- see the plan's own Deviations entries). **Not yet
+verified**: an actual install inside a real Claude Desktop app (TS-009's own manual steps) -- see
+Unverified items.
 
 ### ChatGPT Desktop / VS Code / a Claude connector
 

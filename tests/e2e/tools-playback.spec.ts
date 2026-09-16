@@ -100,7 +100,7 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
 
   // Isolated in its own describe so `retries` (below) applies only to this one flaky test, not
   // the other three reliable ones in this file.
-  test.describe('YouTube tool-set narrowing (a known, still-not-fully-resolved CI flake)', () => {
+  test.describe('YouTube tool-set narrowing (a known, still-not-fully-resolved CI flake) @ci-quarantine', () => {
     // Genuinely unresolved, not papered over: source.kind flips to 'youtube' immediately and
     // correctly (confirmed live via temporary diagnostic instrumentation -- see the plan's own
     // Deviations entry for this task), yet listToolNames() can keep returning the stale,
@@ -108,13 +108,29 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     // per-tool registration-cost fix, a genuine boot-time-race fix, and switching CI to a single
     // Playwright worker (removing 2 concurrent real Chrome instances competing for cores) each
     // reduced this without eliminating it -- it recurred again on CI even at workers:1 and a 45s
-    // poll. Reliable 3/3 in true local isolation, meaning whatever remains is either (a) sequential
-    // resource accumulation across this file's *own* single, long-lived Chrome process reused by
-    // every earlier test in the same CI worker run, or (b) something specific to real Chrome
-    // actually mounting a live youtube.com iframe under CI's network/sandbox conditions -- neither
-    // confirmed. `retries: 2` here (on top of the global CI retries:1, i.e. up to 3 attempts) is an
-    // honest mitigation matching how player.spec.ts:174's own still-open CI flake (Task 8) is
-    // handled, not a claim that the underlying cause is understood or fixed.
+    // poll, then failed identically on 3/3 attempts (the initial run plus both retries) on a later
+    // run, ruling out "independent per-attempt flakiness" as the failure model. Reliable 3/3 in
+    // true local isolation, meaning whatever remains is either (a) sequential resource accumulation
+    // across this file's *own* single, long-lived Chrome process reused by every earlier test in
+    // the same CI worker run, (b) something specific to real Chrome actually mounting a live
+    // youtube.com iframe under CI's network/sandbox conditions, or (c) YouTube serving a
+    // different/heavier response (a bot-check or consent interstitial that pins the main thread)
+    // to GitHub Actions' own shared cloud IP ranges specifically, which would explain both "never
+    // reproduces locally" and "not actually random, just consistently bad in this one environment"
+    // -- none confirmed yet. `retries: 2` here (on top of the global CI retries:1) did not
+    // meaningfully help once this became reproducible (see above) and is kept only as a cheap,
+    // honest mitigation, not a fix.
+    //
+    // QUARANTINED from the deploy-gating CI job (the `@ci-quarantine` tag, added to
+    // deploy.yml's own `--grep-invert` pattern): this test's own failures were blocking every
+    // real deploy after Task 12 -- the site went stale (Tasks 12/13's own work never shipped)
+    // while this one environment-specific test kept the whole `build-and-deploy` job red. A
+    // dedicated follow-up task already owns the deeper root-cause investigation above; quarantine
+    // is a deliberate, user-approved trade-off (this decision was surfaced and confirmed, not made
+    // unilaterally, since it changes the deploy pipeline's own gating) to stop an unresolved,
+    // environment-specific test from blocking real feature delivery indefinitely. This test still
+    // runs in every OTHER context (a plain local `npx playwright test`, and this repo's own
+    // non-CI CI-less runs) -- only the one workflow step that gates GitHub Pages deploys skips it.
     test.describe.configure({ retries: 2 });
 
     test('loading a YouTube source narrows the tool set to its yt-safe subset; loading a file restores it, and ontoolchange fires both times', async ({ page }) => {

@@ -73,6 +73,22 @@ Every write above returned `verification.verified: true` from the CLI's own rend
 - **Markdown export timestamp format**: the mockup's preview text uses full `HH:MM:SS.mmm` timestamps (e.g. `[00:01:24.400]`). The actual `exportMarkdown` (and TS-004's own explicit expected text, e.g. `- [00:01.500] Red scene starts #scene`) uses the app-wide compact `MM:SS.mmm` form instead. The implementation follows the authoritative TS-004 test scenario over the earlier mockup text.
 - Everything else checked (TopBar theme toggle, agent-transport pill, tab bar, timeline track/thumb, chapter/note/box tick colors) matches the token map and component inventory above with no drift.
 
+## Sync status (Task 14)
+
+Not attempted this session. The Task 6 checkpoint above remains the last real
+`open-claude-design sync review` comparison against the code; a full re-review across all five
+deliverable screens (`sync finish` per Task 14's own Definition of Done) was not run. The honest
+gap this leaves: the five mockups were drawn against Task 1's own scope, and the app has since
+grown substantially past it (Tasks 7-13 added segmentation/tracking, scene/search/transcript
+analysis, VLM/OCR vision tools, and the whole Effects panel/voice-over/upscale/translation
+surface) -- none of that later surface has a corresponding mockup to sync against at all, so a
+"finished" ledger for the original five screens would not actually mean the *current* app matches
+Claude Design. Closing this properly needs either updating the Claude Design project itself with
+mockups for the newer panels first, or an explicit decision that the original five screens are the
+permanent design-of-record and everything after Task 6 is implemented ad hoc against the same
+token/component vocabulary (which every later task's own Deviations entries describe doing, e.g.
+Effects.tsx/Vision.tsx following Notes.tsx's established patterns) without a matching mockup.
+
 ## Visual rules for implementation
 
 - Contrast: body/label text is full-opacity `ink` on `bg`/`surface` (verified ≥4.5:1 in both palettes); never alpha-muted text for anything under 18px.
