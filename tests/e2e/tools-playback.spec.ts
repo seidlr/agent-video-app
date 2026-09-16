@@ -116,98 +116,51 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     await expect(page.getByRole('complementary')).toBeVisible();
   });
 
-  // Isolated in its own describe so `retries` (below) applies only to this one flaky test, not
-  // the other three reliable ones in this file.
-  test.describe('YouTube tool-set narrowing (a known, still-not-fully-resolved CI flake) @ci-quarantine', () => {
-    // Genuinely unresolved, not papered over: source.kind flips to 'youtube' immediately and
-    // correctly (confirmed live via temporary diagnostic instrumentation -- see the plan's own
-    // Deviations entry for this task), yet listToolNames() can keep returning the stale,
-    // pre-YouTube set for the *entire* poll window on CI, with zero intermediate movement. A real
-    // per-tool registration-cost fix, a genuine boot-time-race fix, and switching CI to a single
-    // Playwright worker (removing 2 concurrent real Chrome instances competing for cores) each
-    // reduced this without eliminating it -- it recurred again on CI even at workers:1 and a 45s
-    // poll, then failed identically on 3/3 attempts (the initial run plus both retries) on a later
-    // run, ruling out "independent per-attempt flakiness" as the failure model. Reliable 3/3 in
-    // true local isolation, meaning whatever remains is either (a) sequential resource accumulation
-    // across this file's *own* single, long-lived Chrome process reused by every earlier test in
-    // the same CI worker run, (b) something specific to real Chrome actually mounting a live
-    // youtube.com iframe under CI's network/sandbox conditions, or (c) YouTube serving a
-    // different/heavier response (a bot-check or consent interstitial that pins the main thread)
-    // to GitHub Actions' own shared cloud IP ranges specifically, which would explain both "never
-    // reproduces locally" and "not actually random, just consistently bad in this one environment"
-    // -- none confirmed yet. `retries: 2` here (on top of the global CI retries:1) did not
-    // meaningfully help once this became reproducible (see above) and is kept only as a cheap,
-    // honest mitigation, not a fix.
+  test.describe('YouTube tool-set narrowing', () => {
+    // Root cause (found via a diagnostic CI run carrying an independent page.evaluate() liveness
+    // probe, run both in true isolation -- first thing in a fresh CI job, nothing before it -- and
+    // in this file's normal late position): the probe kept responding throughout the stall, with
+    // its own round-trip time climbing from ~7s to ~35s across the poll window (not a frozen
+    // renderer), and the isolated-first run failed identically to the normal-order run. That rules
+    // out every accumulation-across-earlier-tests theory this test's history had accumulated
+    // (registration cost, a boot-time race, 2-worker CPU contention) -- the trigger is mounting
+    // vidstack's real youtube-nocookie.com iframe itself under this CI runner's constrained,
+    // GPU-less real-Chrome environment, which increasingly starves the main thread the longer the
+    // live third-party page keeps compositing/scripting in the background.
     //
-    // QUARANTINED from the deploy-gating CI job (the `@ci-quarantine` tag, added to
-    // deploy.yml's own `--grep-invert` pattern): this test's own failures were blocking every
-    // real deploy after Task 12 -- the site went stale (Tasks 12/13's own work never shipped)
-    // while this one environment-specific test kept the whole `build-and-deploy` job red. A
-    // dedicated follow-up task already owns the deeper root-cause investigation above; quarantine
-    // is a deliberate, user-approved trade-off (this decision was surfaced and confirmed, not made
-    // unilaterally, since it changes the deploy pipeline's own gating) to stop an unresolved,
-    // environment-specific test from blocking real feature delivery indefinitely. This test still
-    // runs in every OTHER context (a plain local `npx playwright test`, and this repo's own
-    // non-CI CI-less runs) -- only the one workflow step that gates GitHub Pages deploys skips it.
-    test.describe.configure({ retries: 2 });
-
+    // This test only needs the app's own `source.kind` state transition and the webmcp registry's
+    // reaction to it (TS-001's DoD) -- it never asserts on the embed actually loading or playing.
+    // Blocking the live youtube-nocookie.com/youtube.com network traffic removes the actual
+    // mechanism instead of padding around it: no more live third-party page, no more CI-only
+    // main-thread starvation, and the real tool-narrowing logic is exercised exactly as before.
     test('loading a YouTube source narrows the tool set to its yt-safe subset; loading a file restores it, and ontoolchange fires both times', async ({ page }) => {
-      test.setTimeout(120_000);
+      await page.route(/(^|\.)(youtube(-nocookie)?|ytimg|googlevideo|ggpht)\.com/, (route) => route.abort());
       await page.goto('/');
 
       await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
       // refreshSourceTools() (agent/webmcp.ts) runs off the store's own subscribe callback (fire-
       // and-forget, not awaited by load_video), so its registerTool() calls can still be in flight
       // once load_video resolves -- poll rather than snapshot listToolNames() once.
-      await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).toContain('step_frames');
+      await expect.poll(async () => listToolNames(page), { timeout: 10_000 }).toContain('step_frames');
 
-      // TEMPORARY diagnostic instrumentation for the still-unresolved CI-only flake (see the
-      // plan's own Deviations section) -- an independent liveness probe, deliberately unrelated
-      // to modelContext/webmcp, firing on its own timer concurrently with the narrowing poll
-      // below. If this ALSO stalls, the whole renderer/CDP connection is frozen (points to a
-      // wedged shared GPU/browser process from earlier tests' real video decode work); if it
-      // keeps responding on schedule while only listToolNames() doesn't move, the freeze is
-      // scoped to the modelContext/webmcp registration path specifically. Revert once this run's
-      // data is in hand -- see the follow-up task this diagnostic run was spawned to inform.
-      let probeN = 0;
-      const probeLog: string[] = [];
-      const probeTimer = setInterval(() => {
-        const n = ++probeN;
-        const sentAt = Date.now();
-        page
-          .evaluate(() => ({
-            now: Date.now(),
-            heap: (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null,
-            iframes: document.querySelectorAll('iframe').length,
-          }))
-          .then((r) => probeLog.push(`[probe#${n}] ok rtt=${Date.now() - sentAt}ms heap=${r.heap} iframes=${r.iframes}`))
-          .catch((e) => probeLog.push(`[probe#${n}] FAILED rtt=${Date.now() - sentAt}ms err=${String(e)}`));
-      }, 2000);
+      const toolchangeCount = await page.evaluate(async (id) => {
+        let count = 0;
+        document.modelContext!.addEventListener('toolchange', () => {
+          count++;
+        });
+        await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
+        return count;
+      }, 'jNQXAC9IVRw');
+      expect(toolchangeCount).toBeGreaterThan(0);
 
-      let toolchangeCount: number;
-      try {
-        toolchangeCount = await page.evaluate(async (id) => {
-          let count = 0;
-          document.modelContext!.addEventListener('toolchange', () => {
-            count++;
-          });
-          await navigator.modelContextTesting!.executeTool('load_video', JSON.stringify({ source: 'youtube', url: `https://youtu.be/${id}` }));
-          return count;
-        }, 'jNQXAC9IVRw');
-        expect(toolchangeCount).toBeGreaterThan(0);
-
-        await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).not.toContain('step_frames');
-      } finally {
-        clearInterval(probeTimer);
-        console.log(`[probe] total=${probeN}\n${probeLog.join('\n')}`);
-      }
+      await expect.poll(async () => listToolNames(page), { timeout: 10_000 }).not.toContain('step_frames');
       // Every yt-unsafe local tool is gone, but every always tool is untouched.
       const withYoutube = await listToolNames(page);
       expect(withYoutube).toContain('get_state');
       expect(withYoutube).toContain('play');
 
       await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
-      await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).toContain('step_frames');
+      await expect.poll(async () => listToolNames(page), { timeout: 10_000 }).toContain('step_frames');
     });
   });
 
