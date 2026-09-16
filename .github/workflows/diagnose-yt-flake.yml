@@ -3,9 +3,12 @@ name: Diagnose YouTube tool-narrowing flake (TEMPORARY)
 # One-off diagnostic workflow for the still-unresolved tools-playback.spec.ts CI flake -- see the
 # plan's own Deviations section (docs/plans/2026-09-14-agent-first-video-player.md). Deliberately
 # separate from deploy.yml: never builds or deploys anything, so a failure here has zero effect on
-# the real Pages site. workflow_dispatch only, on this diagnostic branch -- not wired to any push
-# trigger. Delete this file once the run's data has been captured and analyzed.
+# the real Pages site. Triggers on push to this one diagnostic branch only (workflow_dispatch
+# would need this file to exist on the default branch first, which this diagnostic deliberately
+# avoids touching). Delete this file once the run's data has been captured and analyzed.
 on:
+  push:
+    branches: [diag/yt-flake-liveness-probe]
   workflow_dispatch:
 
 permissions:
