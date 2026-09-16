@@ -202,6 +202,76 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     // onnx/model_q4.onnx_data (14,684,160 B), matching the plan's own "q4 15 MB" figure.
     approxMB: 15,
   },
+  // Task 12: the tools' own `model?: fast|default|quality` argument maps 1:1 to these three
+  // catalog ids by the `vlm-` prefix (`resolveVlmId()` in vlm.worker.ts) -- no other mapping
+  // exists. All three verified live against the real HF tree API for their q4f16 file set (the
+  // exact files transformers.js downloads for this dtype): each approxMB below is computed from
+  // those real byte counts (MB = bytes/1e6, matching client.ts's own convention), not the repo's
+  // total size across every quantization variant.
+  {
+    id: 'vlm-fast',
+    // `image-text-to-text` is a real AutoModelForX class mapping but NOT a recognized
+    // ModelRegistry pipeline task (confirmed live: is_pipeline_cached rejected it with "Unsupported
+    // pipeline task") -- loaded via AutoModelForImageTextToText + AutoProcessor directly, same as
+    // Florence-2 below, hence usesPipeline:false.
+    task: 'image-text-to-text',
+    repo: 'HuggingFaceTB/SmolVLM-256M-Instruct',
+    dtype: 'q4f16',
+    family: 'vlm',
+    device: 'webgpu',
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/HuggingFaceTB/SmolVLM-256M-Instruct',
+    // decoder_model_merged_q4f16 (77,034,560) + embed_tokens_q4f16 (56,770,965) +
+    // vision_encoder_q4f16 (55,037,584) = 188,843,109 B.
+    approxMB: 189,
+    usesPipeline: false,
+  },
+  {
+    id: 'vlm-default',
+    task: 'image-text-to-text',
+    repo: 'onnx-community/LFM2.5-VL-450M-ONNX',
+    dtype: 'q4f16',
+    family: 'vlm',
+    device: 'webgpu',
+    license: 'LFM Open License',
+    url: 'https://huggingface.co/onnx-community/LFM2.5-VL-450M-ONNX',
+    // decoder_model_merged_q4f16 (187,056 + .onnx_data 221,411,328) + embed_tokens_q4f16 (1,060 +
+    // 38,797,312) + vision_encoder_q4f16 (186,719 + 55,330,304) = 315,913,779 B.
+    approxMB: 316,
+    usesPipeline: false,
+  },
+  {
+    id: 'vlm-quality',
+    task: 'image-text-to-text',
+    repo: 'onnx-community/Qwen3.5-0.8B-ONNX',
+    dtype: 'q4f16',
+    family: 'vlm',
+    device: 'webgpu',
+    license: 'Apache-2.0',
+    url: 'https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX',
+    // decoder_model_merged_q4f16 (1,036,898 + .onnx_data 436,662,272) + embed_tokens_q4f16
+    // (1,064 + 147,005,440) + vision_encoder_q4f16 (212,694 + 61,919,744) = 646,838,112 B.
+    approxMB: 647,
+    usesPipeline: false,
+  },
+  {
+    id: 'florence2-base',
+    // <OCR_WITH_REGION>/<DENSE_REGION_CAPTION>/<CAPTION_TO_PHRASE_GROUNDING> confirmed live against
+    // this exact repo's preprocessor_config.json (task_prompts_without_inputs/task_prompts_with_
+    // input) -- not assumed from the model card. No pipeline() task; loaded via
+    // Florence2ForConditionalGeneration + AutoProcessor directly (see florence.worker.ts).
+    task: 'image-text-to-text',
+    repo: 'onnx-community/Florence-2-base-ft',
+    dtype: 'q4f16',
+    family: 'ocr',
+    device: 'webgpu',
+    license: 'MIT',
+    url: 'https://huggingface.co/onnx-community/Florence-2-base-ft',
+    // vision_encoder_q4f16 (62,416,644) + encoder_model_q4f16 (25,705,965) +
+    // decoder_model_merged_q4f16 (56,543,716) + embed_tokens_q4f16 (78,780,309) = 223,446,634 B.
+    approxMB: 224,
+    usesPipeline: false,
+  },
   {
     id: 'depth-anything-v2-small',
     task: 'depth-estimation',
@@ -242,4 +312,12 @@ export function pickSegmentModel(webgpuAvailable: boolean, forceWasm: boolean): 
 export function pickDetectModel(webgpuAvailable: boolean, forceWasm: boolean): ModelCatalogEntry {
   const entry = webgpuAvailable && !forceWasm ? getCatalogEntry('rfdetr-nano') : getCatalogEntry('yolos-tiny');
   return entry ?? (MODEL_CATALOG[0] as ModelCatalogEntry);
+}
+
+export type VlmTier = 'fast' | 'default' | 'quality';
+
+/** Task 12: the one place a VLM tool's own `model?: fast|default|quality` argument maps to a
+ * catalog id -- always `vlm-<tier>`, no other mapping exists anywhere else. */
+export function resolveVlmId(tier: VlmTier | undefined): string {
+  return `vlm-${tier ?? 'default'}`;
 }

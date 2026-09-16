@@ -17,6 +17,7 @@ import { definePlaybackTools } from './tools/playback';
 import { defineSessionTools } from './tools/session';
 import { defineTranscriptTools } from './tools/transcript';
 import { defineVisionTools } from './tools/vision';
+import { defineVlmTools } from './tools/vlm';
 import { mountWebMcp } from './webmcp';
 
 /**
@@ -42,6 +43,7 @@ export function createAgentRegistry(store: StudioStore): Registry {
   defineVisionTools(registry, store);
   defineTranscriptTools(registry, store);
   defineAudioTools(registry, store);
+  defineVlmTools(registry, store);
   return registry;
 }
 

@@ -12,6 +12,17 @@ export interface FrameEntry extends CapturedFrame {
   blobUrl: string;
 }
 
+/** Task 12: one VLM/Florence-2 text result (describe_frame/describe_range/ask_about_frame/
+ * dense_captions). `time` is the frame's timestamp for a single-frame result, or the range's own
+ * `from` for describe_range. */
+export interface VisionResult {
+  id: string;
+  time: number;
+  kind: 'describe' | 'describe_range' | 'ask' | 'dense_captions';
+  text: string;
+  model: string;
+}
+
 export interface PlayerState {
   currentTime: number;
   duration: number;
@@ -115,6 +126,17 @@ export interface StudioState {
    * list -- `null` before any search has run this session. Replaced wholesale by each new search;
    * not persisted across a reload (same convention as `scenes`). */
   visionSearch: { query: string; ranges: { start: number; end: number; score: number }[] } | null;
+  /** Task 12's VLM/Florence-2 results (describe_frame/describe_range/ask_about_frame/
+   * dense_captions), for the Vision panel's own results list ("Add as note"/"Add as chapter
+   * title"). `read_text`/`ground_phrase` add boxes instead (like detect_objects), not an entry
+   * here -- their own text lives on the box's `label`. Session-only, not persisted (same
+   * convention as `scenes`/`visionSearch`). */
+  vision: VisionResult[];
+  /** The in-progress text of a running describe_frame/describe_range/ask_about_frame call, updated
+   * token-by-token (Task 12's "the Vision panel streams tokens" Key Decision) -- `null` when
+   * nothing is generating. Cleared the moment the call finishes and its final `VisionResult` is
+   * added, so a viewer never sees stale streaming text alongside the real, committed result. */
+  visionStreaming: string | null;
   transcript: { segments: TranscriptSegment[]; lang: string | null };
   clips: Clip[];
   activity: ToolCall[];
@@ -177,6 +199,9 @@ export interface StudioState {
   setScenes(scenes: Scene[]): void;
   /** Replaces the whole `visionSearch` slice (`search_frames`'s own result, Task 8). */
   setVisionSearch(result: StudioState['visionSearch']): void;
+  /** Appends one VLM/Florence-2 text result (Task 12). */
+  addVisionResult(input: Omit<VisionResult, 'id'>): string;
+  setVisionStreaming(text: string | null): void;
 
   addBox(input: Omit<Box, 'id'>): string;
   updateBox(id: string, patch: Partial<Box>): void;
@@ -276,6 +301,8 @@ export function createStudioStore() {
     chapters: [],
     scenes: [],
     visionSearch: null,
+    vision: [],
+    visionStreaming: null,
     transcript: { segments: [], lang: null },
     clips: [],
     activity: [],
@@ -381,6 +408,14 @@ export function createStudioStore() {
     },
     setVisionSearch(result) {
       set({ visionSearch: result });
+    },
+    addVisionResult(input) {
+      const id = nextId('vision');
+      set((s) => ({ vision: [...s.vision, { ...input, id }] }));
+      return id;
+    },
+    setVisionStreaming(text) {
+      set({ visionStreaming: text });
     },
 
     addBox(input) {

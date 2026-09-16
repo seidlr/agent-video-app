@@ -65,10 +65,16 @@ const EXPECTED_TOOL_NAMES = [
   'export_project',
   'export_video',
   'export_gif',
+  'describe_frame',
+  'ask_about_frame',
+  'describe_range',
+  'read_text',
+  'dense_captions',
+  'ground_phrase',
 ];
 
-describe('createAgentRegistry (Task 4/5/6/7/8 DoD: registry.test.ts)', () => {
-  it('registers exactly the session/library/playback/frames/notes/chapters/boxes/export/models/vision tools defined so far', () => {
+describe('createAgentRegistry (Task 4/5/6/7/8/12 DoD: registry.test.ts)', () => {
+  it('registers exactly the session/library/playback/frames/notes/chapters/boxes/export/models/vision/vlm tools defined so far', () => {
     const registry = createAgentRegistry(createStudioStore());
     expect(registry.list().map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
   });

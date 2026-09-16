@@ -7,7 +7,12 @@ import { loadTransformers } from './transformersCdn';
  * worker (not just once the worker process exists), so a failed load never gets marked resident. */
 export interface MlWorker {
   ready: Promise<void>;
-  call<TResult = unknown>(method: string, args?: unknown): Promise<TResult>;
+  /** `onStream`, when given, is called with each incremental chunk a worker posts back
+   * (`{type:'stream', id, chunk}`) for *this* call before its own promise resolves with the final
+   * result -- vlm.worker.ts's `generate` is the only method that posts these today (Task 12's own
+   * "the Vision panel streams tokens" Key Decision); every other worker/method simply never sends
+   * one, so `onStream` goes unused there. */
+  call<TResult = unknown>(method: string, args?: unknown, onStream?: (chunk: string) => void): Promise<TResult>;
   terminate(): void;
 }
 
@@ -198,23 +203,29 @@ interface WorkerRpcMessage {
   ok?: boolean;
   result?: unknown;
   error?: string;
-  type?: 'progress';
+  type?: 'progress' | 'stream';
   fraction?: number;
+  chunk?: string;
 }
 
 /** Wraps a real `Worker` (segment.worker.ts today; other model families get their own worker
  * file in later tasks) in the `MlWorker` shape `client.ts` needs: postMessage RPC keyed by an
  * incrementing request id (mirrors agent/jobs.ts's own id-keyed convention, adapted to a Worker
  * boundary), plus unsolicited `{type:'progress'}` messages routed to `onProgress` instead of
- * resolving any pending call. */
-function wrapWorker(worker: Worker, onProgress: (fraction: number) => void): { call<T>(method: string, args?: unknown): Promise<T>; terminate(): void } {
+ * resolving any pending call, and `{type:'stream', id, chunk}` messages (vlm.worker.ts's own
+ * `generate` only, Task 12) routed to that specific call's own `onStream`, if it gave one. */
+function wrapWorker(worker: Worker, onProgress: (fraction: number) => void): { call<T>(method: string, args?: unknown, onStream?: (chunk: string) => void): Promise<T>; terminate(): void } {
   let nextId = 0;
-  const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>();
+  const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: unknown) => void; onStream?: (chunk: string) => void }>();
 
   worker.onmessage = (event: MessageEvent<WorkerRpcMessage>) => {
     const data = event.data;
     if (data.type === 'progress') {
       onProgress(data.fraction ?? 0);
+      return;
+    }
+    if (data.type === 'stream') {
+      if (data.id !== undefined) pending.get(data.id)?.onStream?.(data.chunk ?? '');
       return;
     }
     if (data.id === undefined) return;
@@ -225,10 +236,10 @@ function wrapWorker(worker: Worker, onProgress: (fraction: number) => void): { c
     else entry.reject(new Error(data.error ?? 'worker_error'));
   };
 
-  function call<T>(method: string, args?: unknown): Promise<T> {
+  function call<T>(method: string, args?: unknown, onStream?: (chunk: string) => void): Promise<T> {
     return new Promise((resolve, reject) => {
       const id = String(nextId++);
-      pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+      pending.set(id, { resolve: resolve as (value: unknown) => void, reject, onStream });
       worker.postMessage({ id, method, args });
     });
   }
@@ -260,6 +271,10 @@ function spawnWorkerForFamily(family: ModelCatalogEntry['family']): Worker {
       return new Worker(new URL('./embed.worker.ts', import.meta.url), { type: 'module' });
     case 'depth':
       return new Worker(new URL('./depth.worker.ts', import.meta.url), { type: 'module' });
+    case 'vlm':
+      return new Worker(new URL('./vlm.worker.ts', import.meta.url), { type: 'module' });
+    case 'ocr':
+      return new Worker(new URL('./florence.worker.ts', import.meta.url), { type: 'module' });
     default:
       throw new Error(`no_worker_for_family: ${family} (its worker file doesn't exist yet)`);
   }
