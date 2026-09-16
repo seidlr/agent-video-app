@@ -99,7 +99,7 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
   });
 
   test('loading a YouTube source narrows the tool set to its yt-safe subset; loading a file restores it, and ontoolchange fires both times', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     await page.goto('/');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
@@ -108,11 +108,14 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     // once load_video resolves -- poll rather than snapshot listToolNames() once. This poll's
     // timeout was bumped repeatedly across Tasks 8-11 chasing a CI-only failure (see the plan's own
     // Deviations entry for the full history: a real boot-time race was found and fixed along the
-    // way, but the actual root cause -- confirmed by temporary diagnostic instrumentation -- was
-    // 2 concurrent real Chrome instances (this repo's own CI worker count) starving each other's
-    // renderer process on the runner's small core count; playwright.config.ts now runs CI with a
-    // single worker instead. 30s remains real, generous headroom for actual registration latency.
-    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
+    // way, and the main root cause -- confirmed by temporary diagnostic instrumentation -- was 2
+    // concurrent real Chrome instances (this repo's own CI worker count) starving each other's
+    // renderer process; playwright.config.ts now runs CI with a single worker. Reliable in true
+    // isolation (confirmed: 3/3 local runs) but still reproduced once during a full-suite local
+    // run even at 1 worker -- residual tail latency this fix reduces but a worker-count change
+    // alone cannot fully eliminate on a machine also running other real CPU work. 45s is
+    // deliberate headroom on top of the structural fix, not a substitute for it.
+    await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).toContain('step_frames');
 
     const toolchangeCount = await page.evaluate(async (id) => {
       let count = 0;
@@ -124,14 +127,14 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     }, 'jNQXAC9IVRw');
     expect(toolchangeCount).toBeGreaterThan(0);
 
-    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).not.toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).not.toContain('step_frames');
     // Every yt-unsafe local tool is gone, but every always tool is untouched.
     const withYoutube = await listToolNames(page);
     expect(withYoutube).toContain('get_state');
     expect(withYoutube).toContain('play');
 
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
-    await expect.poll(async () => listToolNames(page), { timeout: 30_000 }).toContain('step_frames');
+    await expect.poll(async () => listToolNames(page), { timeout: 45_000 }).toContain('step_frames');
   });
 
   test('window.agentVideo (the scripting bridge) can call seek, and the call is logged to Activity with via:"bridge"', async ({ page }) => {
