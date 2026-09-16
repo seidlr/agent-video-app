@@ -92,6 +92,53 @@ test.describe('VLM tools: describe_frame/describe_range/ask_about_frame @ml', ()
   });
 });
 
+test.describe('Frames panel: Describe/Read text buttons (Task 12 DoD)', () => {
+  // These act on an already-captured frame's own stored image (Frames.tsx's runDescribe/
+  // runReadText, wired directly through mlClient rather than the describe_frame/read_text
+  // tools), so this exercises that wiring end to end rather than duplicating vlm-prompts.test.ts
+  // or the describe_frame/ask_about_frame/describe_range tool tests above.
+  test('Describe downloads vlm-default on confirm and posts a real result to the Vision panel', async ({ page }) => {
+    test.setTimeout(180_000);
+    await loadFixtureAndWaitReady(page);
+    const captured = await execTool(page, 'capture_frame', { time: 1 });
+    expect(captured.ok).toBe(true);
+
+    const listed = await execTool(page, 'list_models');
+    const vlmDefault = (listed.models as { id: string; sizeMB: number }[]).find((m) => m.id === 'vlm-default');
+    expect(vlmDefault).toBeDefined();
+
+    await page.locator('button', { hasText: 'Frames' }).click();
+    await page.locator('button', { hasText: 'Describe' }).click();
+    await expect(page.getByText(`~${vlmDefault!.sizeMB} MB`)).toBeVisible();
+
+    await page.locator('button', { hasText: 'Download' }).click();
+    await expect(page.getByText('Described -- see Vision panel')).toBeVisible({ timeout: 60_000 });
+
+    await page.locator('button', { hasText: 'Vision' }).click();
+    await expect(page.getByText('Frame description', { exact: false })).toBeVisible();
+  });
+
+  test('Read text shows the florence2-base size-confirm gate before any download is attempted', async ({ page }) => {
+    await loadFixtureAndWaitReady(page);
+    const captured = await execTool(page, 'capture_frame', { time: 7 });
+    expect(captured.ok).toBe(true);
+
+    const listed = await execTool(page, 'list_models');
+    const florence = (listed.models as { id: string; sizeMB: number }[]).find((m) => m.id === 'florence2-base');
+    expect(florence).toBeDefined();
+
+    await page.locator('button', { hasText: 'Frames' }).click();
+    await page.locator('button', { hasText: 'Read text' }).click();
+    await expect(page.getByText(`~${florence!.sizeMB} MB`)).toBeVisible();
+
+    // Cancel rather than confirm: Florence-2 loading is a known, external, not-yet-fixed blocker
+    // (see florence.worker.ts's own module doc comment and the plan's Task 12 Deviations entry) --
+    // this test only verifies the confirm-gate UI, not the (currently broken) model load itself.
+    await page.locator('button', { hasText: 'Cancel' }).click();
+    await expect(page.getByText(`~${florence!.sizeMB} MB`)).not.toBeVisible();
+  });
+});
+
 test.describe('Florence-2 OCR/grounding @ml', () => {
   // KNOWN, EXTERNAL BLOCKER (see src/ml/florence.worker.ts's own module doc comment and the
   // plan's Task 12 Deviations entry): loading onnx-community/Florence-2-base-ft (and the plain

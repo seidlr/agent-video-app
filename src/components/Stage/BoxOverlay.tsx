@@ -1,7 +1,23 @@
 import { memo } from 'react';
 import type { ReactElement } from 'react';
+import { Captions, Crosshair } from 'lucide-react';
 import { interpolateTrackBox, isBoxVisibleAt } from '../../lib/boxVisibility';
 import { useStudio } from '../../store/studio';
+import type { Box } from '../../lib/types';
+
+/** Task 12: `ocr`/`ground` boxes are agent-drawn like every other source and keep the reserved
+ * `--color-annotate` hue (Global Constraints), but a Florence-2 OCR pass can add many small,
+ * overlapping text-region boxes in one call -- a dashed border plus a small icon in the label
+ * tells them apart from a "real" detected/tracked object at a glance without a second color. */
+const BORDER_STYLE: Partial<Record<Box['source'], string>> = {
+  ocr: 'border-dashed',
+  ground: 'border-dotted',
+};
+
+const LABEL_ICON: Partial<Record<Box['source'], typeof Captions>> = {
+  ocr: Captions,
+  ground: Crosshair,
+};
 
 /**
  * Renders agent-drawn boxes/masks that are visible at the current time. A box with `until` is
@@ -24,10 +40,11 @@ function BoxOverlayInner(): ReactElement {
       {visible.map((box) => {
         const track = box.trackId ? tracks.find((t) => t.id === box.trackId) : undefined;
         const rect = (track ? interpolateTrackBox(track.keyframes, currentTime) : null) ?? box;
+        const Icon = LABEL_ICON[box.source];
         return (
           <div
             key={box.id}
-            className="pointer-events-none absolute z-10 flex flex-col border-2 border-annotate shadow-[0_0_10px_rgba(79,179,217,0.5)]"
+            className={`pointer-events-none absolute z-10 flex flex-col border-2 border-annotate shadow-[0_0_10px_rgba(79,179,217,0.5)] ${BORDER_STYLE[box.source] ?? ''}`}
             style={{
               top: `${rect.y * 100}%`,
               left: `${rect.x * 100}%`,
@@ -36,7 +53,8 @@ function BoxOverlayInner(): ReactElement {
               background: 'color-mix(in srgb, var(--color-annotate) 20%, transparent)',
             }}
           >
-            <span className="-mt-6 self-start whitespace-nowrap rounded-t bg-annotate px-1.5 py-0.5 text-[12px] font-bold text-annotate-ink shadow-sm">
+            <span className="-mt-6 flex items-center gap-1 self-start whitespace-nowrap rounded-t bg-annotate px-1.5 py-0.5 text-[12px] font-bold text-annotate-ink shadow-sm">
+              {Icon && <Icon size={11} />}
               {box.label}
             </span>
           </div>

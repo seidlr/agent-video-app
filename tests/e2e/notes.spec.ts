@@ -96,3 +96,44 @@ test.describe('notes, chapters, and exports (Task 6 DoD, TS-004)', () => {
     expect(downloadedText).toBe(markdownText);
   });
 });
+
+/** Injects a Task 12 vision result the same shape describe_frame/ask_about_frame/describe_range
+ * produce, without a real VLM call -- the Vision panel's "Add as note"/"Add as chapter title"
+ * promotion buttons don't depend on how the text got there, so this exercises that UI wiring
+ * directly and quickly rather than duplicating vlm.spec.ts's own (slow, real-model) coverage. */
+async function addVisionResult(page: Page, input: { time: number; kind: string; text: string; model: string }): Promise<void> {
+  await page.evaluate(
+    (r) => (window as unknown as { __studioStore: { getState(): { addVisionResult(input: typeof r): string } } }).__studioStore.getState().addVisionResult(r),
+    input,
+  );
+}
+
+test.describe('Vision panel: promoting a VLM result to a note or chapter (Task 12 DoD)', () => {
+  test('"Add as note" and "Add as chapter title" create a real note and chapter from a vision result', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('button', { hasText: 'Library' }).click();
+    await page.locator('button', { hasText: 'Sprite Fight' }).click();
+    await expect(page.locator('header b')).toHaveText('Sprite Fight');
+
+    await addVisionResult(page, { time: 1.5, kind: 'describe', text: 'A red scene with a moving white square', model: 'vlm-default' });
+
+    await page.locator('button', { hasText: 'Vision' }).click();
+    await expect(page.getByText('A red scene with a moving white square')).toBeVisible();
+    await expect(page.getByText('Frame description', { exact: false })).toBeVisible();
+
+    await page.locator('button', { hasText: 'Add as note' }).click();
+    await expect(page.getByText('Added!').first()).toBeVisible();
+
+    await page.locator('button', { hasText: 'Notes' }).first().click();
+    await expect(page.getByText('A red scene with a moving white square')).toBeVisible();
+    await expect(page.getByRole('button', { name: /00:01\.500.*A red scene/ })).toBeVisible();
+
+    await page.locator('button', { hasText: 'Vision' }).click();
+    await page.locator('button', { hasText: 'Add as chapter title' }).click();
+    await expect(page.getByText('Added!').first()).toBeVisible();
+
+    await page.locator('button', { hasText: 'Notes' }).first().click();
+    await page.locator('button', { hasText: 'Chapters' }).last().click();
+    await expect(page.getByRole('button', { name: /00:01\.500.*A red scene with a moving white square/ })).toBeVisible();
+  });
+});
