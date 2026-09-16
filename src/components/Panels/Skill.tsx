@@ -79,12 +79,19 @@ export function Skill(): ReactElement {
     {
       id: 'claude-desktop-mcp-app',
       title: 'Claude Desktop (MCP App)',
-      steps: ['Planned for Task 11: install the .mcpb bundle, or add a public connector URL once published.'],
+      steps: [
+        'Run npm run mcp:bundle to produce agent-video-studio.mcpb.',
+        'Claude Desktop -> Settings -> Extensions -> install the .mcpb file.',
+        'Start a new conversation and ask Claude to open the video studio.',
+      ],
     },
     {
       id: 'codex-cli',
       title: 'Codex CLI (HTTP bus)',
-      steps: ['Planned for Task 11: codex mcp add agent-video-studio -- node <path>/server/dist/stdio.js'],
+      steps: [
+        'Run npm run build:server once, then: codex mcp add agent-video-studio -- node <repo>/server/dist/stdio.js',
+        `Open this site (deployed, or npm run dev) with ?bus=http://localhost:3333 in a normal tab -- that tab is the UI; don't also call open_video_studio in this mode.`,
+      ],
     },
   ];
 

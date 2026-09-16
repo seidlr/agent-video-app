@@ -13,6 +13,7 @@ import { Clips } from './components/Panels/Clips';
 import { Effects } from './components/Panels/Effects';
 import { Skill } from './components/Panels/Skill';
 import { ToastStack } from './components/ToastStack';
+import { WelcomeExplainer } from './components/WelcomeExplainer';
 import { useStudio } from './store/studio';
 import type { PanelId } from './store/studio';
 
@@ -76,13 +77,7 @@ export function App(): ReactElement {
       <TopBar />
       <div className={`mx-auto flex min-h-0 w-full flex-1 gap-0 pb-5 ${compact ? 'px-2' : 'max-w-[1440px] px-5'}`}>
         <main className="flex min-w-0 flex-1 flex-col gap-3.5 py-4">
-          {source ? (
-            <VideoStage />
-          ) : (
-            <div className="grid flex-1 place-items-center rounded-token-lg border border-line bg-surface text-ink-3">
-              Load a video from the Library panel to get started.
-            </div>
-          )}
+          {source ? <VideoStage /> : <WelcomeExplainer />}
         </main>
         {/* Task 11/14's own "compact layout" gap: `set_view {layout:'focus'}` (any transport, and
             src/agent/mcpApp.ts's own displayMode:'pip' handling) drops this 392px-wide side panel
