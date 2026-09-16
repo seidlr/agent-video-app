@@ -60,7 +60,10 @@ export async function mountBusClient(registry: Registry, store: StudioStore, bus
 
   async function register(): Promise<void> {
     const result = await postJson(`${busUrl}/bus/register`, { instanceId });
-    if (result?.ok) registered = true;
+    if (result?.ok) {
+      registered = true;
+      store.getState().setAgentInstanceActive(true);
+    }
   }
 
   await register();
@@ -86,6 +89,7 @@ export async function mountBusClient(registry: Registry, store: StudioStore, bus
         // this tab never having registered at all. This tab has no way to reclaim focus on its
         // own (there is no render tool to call from a UI-less client's own browser tab), so just
         // wait; a human re-registering elsewhere is the only way back.
+        store.getState().setAgentInstanceActive(false);
         await sleep(RETIRED_RETRY_MS);
         continue;
       }

@@ -32,7 +32,16 @@ describe('createStudioStore', () => {
     expect(s.ui.theme).toBe('system');
     expect(s.ui.panel).toBe('activity');
     expect(s.ui.agentTransport).toBe('none');
+    expect(s.ui.agentInstanceActive).toBe(true);
     expect(s.storage.persisted).toBe(false);
+  });
+
+  it('setAgentInstanceActive tracks whether this instance is the bus\'s currently-active one', () => {
+    const store = createStudioStore();
+    store.getState().setAgentInstanceActive(false);
+    expect(store.getState().ui.agentInstanceActive).toBe(false);
+    store.getState().setAgentInstanceActive(true);
+    expect(store.getState().ui.agentInstanceActive).toBe(true);
   });
 
   it('setSource replaces the current resolved source', () => {

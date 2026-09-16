@@ -76,6 +76,7 @@ export async function mountMcpApp(registry: Registry, store: StudioStore): Promi
     const structured = result.structuredContent as { instanceId?: string; load?: Record<string, unknown> } | undefined;
     if (!structured?.instanceId) return;
     instanceId = structured.instanceId;
+    store.getState().setAgentInstanceActive(true);
     if (structured.load && Object.keys(structured.load).length > 0) {
       void registry.call('load_video', structured.load, { via: 'mcp-app' });
     }
@@ -119,6 +120,7 @@ export async function mountMcpApp(registry: Registry, store: StudioStore): Promi
       if (!polled) continue;
       if (polled.retired) {
         instanceId = undefined;
+        store.getState().setAgentInstanceActive(false);
         continue;
       }
       if (!polled.command) continue;

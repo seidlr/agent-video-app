@@ -45,6 +45,12 @@ export interface UiState {
   panel: PanelId;
   layout: 'studio' | 'focus';
   agentTransport: AgentTransport;
+  /** For the `mcp-app`/`mcp-bus` transports only (Task 11): whether *this* rendered instance is
+   * the bus's currently-active one. A newer instance (another tab, or a fresh MCP App render)
+   * always retires the previous one -- `mcpApp.ts`/`busClient.ts`'s poll loops set this to `false`
+   * the moment a poll comes back `{retired:true}`. Meaningless (left `true`) for `webmcp`/`bridge`,
+   * which have no such instance-hand-off concept. */
+  agentInstanceActive: boolean;
 }
 
 export interface StorageState {
@@ -209,6 +215,7 @@ export interface StudioState {
   setView(panel: PanelId, layout?: UiState['layout']): void;
   setTheme(theme: ThemeSetting): void;
   setAgentTransport(transport: AgentTransport): void;
+  setAgentInstanceActive(active: boolean): void;
 
   setStorageState(patch: Partial<StorageState>): void;
 
@@ -272,7 +279,7 @@ export function createStudioStore() {
     transcript: { segments: [], lang: null },
     clips: [],
     activity: [],
-    ui: { theme: 'system', panel: 'activity', layout: 'studio', agentTransport: 'none' },
+    ui: { theme: 'system', panel: 'activity', layout: 'studio', agentTransport: 'none', agentInstanceActive: true },
     capabilities: detectCapabilities(),
     storage: { persisted: false, usage: 0, quota: 0, worksInThisContext: true },
     models: {},
@@ -469,6 +476,9 @@ export function createStudioStore() {
     },
     setAgentTransport(transport) {
       set((s) => ({ ui: { ...s.ui, agentTransport: transport } }));
+    },
+    setAgentInstanceActive(active) {
+      set((s) => ({ ui: { ...s.ui, agentInstanceActive: active } }));
     },
 
     setStorageState(patch) {

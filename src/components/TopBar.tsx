@@ -11,6 +11,12 @@ const TRANSPORT_LABEL: Record<string, { text: string; tone: 'good' | 'off' }> = 
   none: { text: 'No agent connected', tone: 'off' },
 };
 
+/** Only `mcp-app`/`mcp-bus` have an instance hand-off concept (Task 11): a newer render or tab
+ * always retires this one, at which point it's still "connected" in the sense that its own
+ * transport is mounted, but no longer the one commands reach -- worth surfacing distinctly rather
+ * than showing a misleadingly steady "connected" pill while nothing is actually happening. */
+const INSTANCE_HANDOFF_TRANSPORTS = new Set(['mcp-app', 'mcp-bus']);
+
 const THEME_CYCLE: ThemeSetting[] = ['system', 'light', 'dark'];
 const THEME_ICON: Record<ThemeSetting, string> = { system: '◐', light: '☀', dark: '☾' };
 
@@ -24,6 +30,7 @@ export function TopBar(): ReactElement {
   const theme = useStudio((s) => s.ui.theme);
   const setTheme = useStudio((s) => s.setTheme);
   const transport = useStudio((s) => s.ui.agentTransport);
+  const instanceActive = useStudio((s) => s.ui.agentInstanceActive);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -36,7 +43,10 @@ export function TopBar(): ReactElement {
     setTheme(next);
   }
 
-  const pill = TRANSPORT_LABEL[transport] ?? TRANSPORT_LABEL.none!;
+  const showInactive = INSTANCE_HANDOFF_TRANSPORTS.has(transport) && !instanceActive;
+  const pill = showInactive
+    ? { text: `${TRANSPORT_LABEL[transport]?.text.split(' ·')[0] ?? transport} · inactive`, tone: 'off' as const }
+    : (TRANSPORT_LABEL[transport] ?? TRANSPORT_LABEL.none!);
 
   return (
     <header className="flex h-[54px] flex-none items-center gap-4 border-b border-line bg-surface px-5">
@@ -61,6 +71,7 @@ export function TopBar(): ReactElement {
       </button>
       <div
         className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[10.5px] ${pill.tone === 'good' ? 'bg-good-soft text-good' : 'bg-chip text-ink-3'}`}
+        title={showInactive ? 'A newer tab or render took over this instance -- reactivate it there to resume commands here.' : undefined}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${pill.tone === 'good' ? 'bg-good' : 'bg-ink-4'}`} />
         {pill.text}
