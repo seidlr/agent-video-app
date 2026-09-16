@@ -41,13 +41,23 @@ await window.agentVideo.call('get_state', {});
 every call is logged to the Activity panel with `via:"bridge"` so a human watching the tab can see
 what the agent just did.
 
-## Claude Desktop (MCP App) and Codex CLI (HTTP bus)
+## Claude Desktop (MCP App)
 
-Planned for a later update (Task 11 of the implementation plan): a bundled `.mcpb` extension
-rendering the studio as a Claude Desktop MCP App, and an HTTP command bus so a UI-less client like
-Codex CLI can drive a normal browser tab of the site. Not available yet -- use one of the
-transports above in the meantime. `docs/agents.md` in the repository records the exact status of
-each host path with dates as they land.
+1. Run `npm run mcp:bundle` to produce `agent-video-studio.mcpb` at the repo root.
+2. Claude Desktop -> Settings -> Extensions -> install the `.mcpb` file.
+3. Start a new conversation and ask Claude to open the video studio. Claude Desktop then has an
+   `open_video_studio` tool that renders the studio as an MCP App; every other tool (seek,
+   capture_frame, segment, transcribe, ...) dispatches through an instance-bound command bus to
+   whichever UI instance (the rendered MCP App, or a normal browser tab) is currently active.
+
+## Codex CLI (HTTP bus)
+
+Codex CLI has no MCP App rendering, so a plain browser tab of the site acts as its UI instead:
+
+1. Run `npm run build:server` once, then: `codex mcp add agent-video-studio -- node <repo>/server/dist/stdio.js`
+2. Open the site (deployed, or `npm run dev`) with `?bus=http://localhost:3333` in a normal browser
+   tab -- that tab is the session's only UI instance. Don't also call `open_video_studio` in this
+   mode; it registers a second, competing UI instance that retires the tab you just opened.
 
 ## Verifying a connection
 
