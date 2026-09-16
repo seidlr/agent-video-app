@@ -54,6 +54,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Build MCP App
+        # Adds dist/mcp-app.html (+ its now-tiny worker chunks) alongside the main site's own
+        # build output -- vite.mcp-app.config.ts's emptyOutDir:false means this never wipes what
+        # `npm run build` just produced. Deployed to the same GitHub Pages origin so it's servable
+        # at /mcp-app.html (Task 14's own top-level Verification bullet) in addition to backing
+        # the local .mcpb bundle's own `ui://` resource.
+        run: npm run build:mcp-app
+
       - name: End-to-end tests (production build)
         # TS-008: skill.zip / .well-known discovery / the Skill panel, all against the real
         # dist/ output this workflow is about to deploy -- vite preview serves it under the same
