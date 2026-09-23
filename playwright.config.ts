@@ -13,6 +13,12 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: '.',
   testMatch: ['tests/e2e/**/*.spec.ts', 'tests/unit/opfs.test.ts', 'server/test/**/*.test.ts'],
+  // testDir:'.' + an unanchored `**` glob can otherwise wander into a co-existing git worktree
+  // checked out under .claude/worktrees/ (a real, separate clone with its own node_modules),
+  // which crashes the whole run with "Requiring @playwright/test second time" once that
+  // worktree's own tests/e2e/*.spec.ts files get matched too. Confirmed live: this only
+  // manifests when another session's worktree coexists, so it was latent until now.
+  testIgnore: ['**/.claude/**'],
   fullyParallel: true,
   // CI runs 1 worker, not Playwright's own CPU-based default (2 on this repo's runner): diagnostic
   // instrumentation on the tools-playback.spec.ts:101 flake (see the plan's own Deviations entry)
