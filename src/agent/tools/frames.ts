@@ -29,17 +29,106 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+export type CaptureFrameArgs = {
+  time?: string | number;
+  format?: CaptureFormat;
+  maxWidth?: number;
+  includeOverlays?: boolean;
+  download?: boolean;
+  includeDataUrl?: boolean;
+  name?: string;
+  stay?: boolean;
+} & Record<string, unknown>;
+
+/** Core logic behind `capture_frame`, extracted so a human-driven UI action (a "Capture frame"
+ * button in the player chrome) can call the exact same pipeline the tool uses without going
+ * through the registry -- the Activity feed and its Toast are reserved for what an *agent* did
+ * (see Clips.tsx/Frames.tsx's own comments on this same convention), not a running log of human
+ * clicks. */
+export async function runCaptureFrame(store: StudioStore, args: CaptureFrameArgs): Promise<ToolResult> {
+  const state = store.getState();
+  if (!state.source) return { ok: false, error: 'no_video_loaded' };
+
+  // A YouTube iframe's pixels are cross-origin and unreachable directly, but once the
+  // TabCaptureButton has armed a getDisplayMedia() session (a user gesture is required, so a
+  // tool call alone can never start one), its <video> is a real, readable capture of
+  // whatever tab was picked -- typically this same page -- and works exactly like a local
+  // video element here.
+  const video = state.source.kind === 'youtube' ? (getActiveTabCapture()?.video ?? null) : getVideoElement();
+  if (state.source.kind === 'youtube' && !video) {
+    return {
+      ok: false,
+      error: 'youtube_pixels_unavailable',
+      hint: 'No direct pixel access to a YouTube iframe. Use the tab-capture button in the player chrome to enable it for this video.',
+    };
+  }
+  if (!video) return { ok: false, error: 'video_not_ready' };
+
+  let previousTime: number | undefined;
+  if (args.time !== undefined) {
+    const target = parseTime(args.time, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
+    if (target === null) {
+      return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+    }
+    previousTime = state.player.currentTime;
+    await state.seek(target);
+  }
+
+  // video.currentTime (the real DOM element), not store.getState().player.currentTime: the
+  // store's copy only updates via the native `timeupdate` event (VideoStage.tsx), which does
+  // not reliably fire in lockstep with a programmatic seek -- especially the very first seek
+  // on a video that has never played, where `seeked` fires but no `timeupdate` follows in
+  // time (confirmed empirically: capturedAt read immediately after `await state.seek(2.0)`
+  // came back 0, producing the wrong filename). video.currentTime is always correct there: it
+  // is the literal property `seeked` reports on, with no separate event-driven mirror to lag
+  // behind. The one exception is the YouTube tab-capture path: `video` there is a
+  // getDisplayMedia() screen-recording stream, whose `.currentTime` tracks elapsed capture
+  // time, not the YouTube player's playhead -- state.seek() drives the actual YouTube
+  // provider, so the store's own (separately synced) currentTime is the correct read there.
+  const capturedAt = state.source.kind === 'youtube' ? store.getState().player.currentTime : video.currentTime;
+  const format = args.format ?? 'png';
+  const visibleBoxes = args.includeOverlays ? store.getState().boxes.filter((b) => isBoxVisibleAt(b, capturedAt)) : undefined;
+  const result = await captureCurrentFrame(video, { maxWidth: args.maxWidth, format, boxes: visibleBoxes });
+
+  if (previousTime !== undefined && !args.stay) {
+    await store.getState().seek(previousTime);
+  }
+
+  if ('error' in result) {
+    return {
+      ok: false,
+      error: result.error,
+      hint: result.error === 'source_not_capturable' ? 'Load a CORS-enabled URL or a local file instead.' : undefined,
+    };
+  }
+
+  const filename = captureFilename(capturedAt, args.name, format);
+
+  let downloadedAs: string | undefined;
+  if (args.download) {
+    triggerDownload(result.blob, filename);
+    downloadedAs = filename;
+  }
+
+  const blobUrl = URL.createObjectURL(result.blob);
+  const frameId = store.getState().addFrame({ time: capturedAt, kind: 'frame', width: result.width, height: result.height, downloadedAs, blobUrl });
+  await tryPersist(store.getState(), () => persistFrame({ id: frameId, time: capturedAt, kind: 'frame', width: result.width, height: result.height, blob: result.blob, downloadedAs }));
+
+  const dataUrl = args.includeDataUrl ? await blobToDataUrl(result.blob) : undefined;
+
+  return {
+    ok: true,
+    summary: `Captured frame at ${secsToTimecode(capturedAt)} (${result.width}x${result.height})${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}`,
+    frameId,
+    width: result.width,
+    height: result.height,
+    downloadedAs,
+    dataUrl,
+  };
+}
+
 export function defineFramesTools(registry: Registry, store: StudioStore): void {
-  registry.define<{
-    time?: string | number;
-    format?: CaptureFormat;
-    maxWidth?: number;
-    includeOverlays?: boolean;
-    download?: boolean;
-    includeDataUrl?: boolean;
-    name?: string;
-    stay?: boolean;
-  }>({
+  registry.define<CaptureFrameArgs>({
     name: 'capture_frame',
     description:
       'Captures the exact currently-displayed video frame as an image. Shows it in the Frames tray, and optionally downloads it or returns it as a data URL for a host with no file access.',
@@ -63,87 +152,7 @@ export function defineFramesTools(registry: Registry, store: StudioStore): void 
     // youtube_pixels_unavailable, not a missing tool. A plain 'local' tag would only register it
     // for local sources, same as generate_thumbnails intentionally stays.
     when: 'yt',
-    handler: async (args): Promise<ToolResult> => {
-      const state = store.getState();
-      if (!state.source) return { ok: false, error: 'no_video_loaded' };
-
-      // A YouTube iframe's pixels are cross-origin and unreachable directly, but once the
-      // TabCaptureButton has armed a getDisplayMedia() session (a user gesture is required, so a
-      // tool call alone can never start one), its <video> is a real, readable capture of
-      // whatever tab was picked -- typically this same page -- and works exactly like a local
-      // video element here.
-      const video = state.source.kind === 'youtube' ? (getActiveTabCapture()?.video ?? null) : getVideoElement();
-      if (state.source.kind === 'youtube' && !video) {
-        return {
-          ok: false,
-          error: 'youtube_pixels_unavailable',
-          hint: 'No direct pixel access to a YouTube iframe. Use the tab-capture button in the player chrome to enable it for this video.',
-        };
-      }
-      if (!video) return { ok: false, error: 'video_not_ready' };
-
-      let previousTime: number | undefined;
-      if (args.time !== undefined) {
-        const target = parseTime(args.time, { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps });
-        if (target === null) {
-          return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
-        }
-        previousTime = state.player.currentTime;
-        await state.seek(target);
-      }
-
-      // video.currentTime (the real DOM element), not store.getState().player.currentTime: the
-      // store's copy only updates via the native `timeupdate` event (VideoStage.tsx), which does
-      // not reliably fire in lockstep with a programmatic seek -- especially the very first seek
-      // on a video that has never played, where `seeked` fires but no `timeupdate` follows in
-      // time (confirmed empirically: capturedAt read immediately after `await state.seek(2.0)`
-      // came back 0, producing the wrong filename). video.currentTime is always correct there: it
-      // is the literal property `seeked` reports on, with no separate event-driven mirror to lag
-      // behind. The one exception is the YouTube tab-capture path: `video` there is a
-      // getDisplayMedia() screen-recording stream, whose `.currentTime` tracks elapsed capture
-      // time, not the YouTube player's playhead -- state.seek() drives the actual YouTube
-      // provider, so the store's own (separately synced) currentTime is the correct read there.
-      const capturedAt = state.source.kind === 'youtube' ? store.getState().player.currentTime : video.currentTime;
-      const format = args.format ?? 'png';
-      const visibleBoxes = args.includeOverlays ? store.getState().boxes.filter((b) => isBoxVisibleAt(b, capturedAt)) : undefined;
-      const result = await captureCurrentFrame(video, { maxWidth: args.maxWidth, format, boxes: visibleBoxes });
-
-      if (previousTime !== undefined && !args.stay) {
-        await store.getState().seek(previousTime);
-      }
-
-      if ('error' in result) {
-        return {
-          ok: false,
-          error: result.error,
-          hint: result.error === 'source_not_capturable' ? 'Load a CORS-enabled URL or a local file instead.' : undefined,
-        };
-      }
-
-      const filename = captureFilename(capturedAt, args.name, format);
-
-      let downloadedAs: string | undefined;
-      if (args.download) {
-        triggerDownload(result.blob, filename);
-        downloadedAs = filename;
-      }
-
-      const blobUrl = URL.createObjectURL(result.blob);
-      const frameId = store.getState().addFrame({ time: capturedAt, kind: 'frame', width: result.width, height: result.height, downloadedAs, blobUrl });
-      await tryPersist(store.getState(), () => persistFrame({ id: frameId, time: capturedAt, kind: 'frame', width: result.width, height: result.height, blob: result.blob, downloadedAs }));
-
-      const dataUrl = args.includeDataUrl ? await blobToDataUrl(result.blob) : undefined;
-
-      return {
-        ok: true,
-        summary: `Captured frame at ${secsToTimecode(capturedAt)} (${result.width}x${result.height})${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}`,
-        frameId,
-        width: result.width,
-        height: result.height,
-        downloadedAs,
-        dataUrl,
-      };
-    },
+    handler: (args) => runCaptureFrame(store, args),
   });
 
   registry.define({

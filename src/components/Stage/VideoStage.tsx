@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactElement } from 'react';
 import { MediaPlayer, MediaProvider, Track, type MediaPlayerInstance, type VideoMimeType } from '@vidstack/react';
 import { BoxDrawLayer } from './BoxDrawLayer';
 import { BoxOverlay } from './BoxOverlay';
+import { SegmentClickLayer } from './SegmentClickLayer';
 import { MaskOverlay } from './MaskOverlay';
 import { PoseOverlay } from './PoseOverlay';
 import { Chrome } from './Chrome';
@@ -225,6 +226,7 @@ export function VideoStage(): ReactElement {
         <BoxOverlay />
         <PoseOverlay />
         <BoxDrawLayer />
+        <SegmentClickLayer />
         <PlayOverlay hidden={hasPlayed} onPlay={() => void handlePlayClick()} />
         <Chrome playerRef={playerRef} containerRef={containerRef} />
       </div>

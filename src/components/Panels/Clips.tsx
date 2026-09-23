@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { parseTime, secsToTimecode } from '../../lib/time';
 import { exportVideoClips } from '../../media/export';
+import { exportGif } from '../../media/gif';
 import { getInput } from '../../media/input';
 import { useStudio } from '../../store/studio';
 
@@ -48,6 +49,11 @@ export function Clips(): ReactElement {
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
 
+  const [gifStart, setGifStart] = useState('');
+  const [gifEnd, setGifEnd] = useState('');
+  const [gifProgress, setGifProgress] = useState<number | null>(null);
+  const [gifMessage, setGifMessage] = useState<string | null>(null);
+
   const timeCtx = { currentTime: player.currentTime, duration: player.duration, fps: player.fps };
   const sorted = [...clips].sort((a, b) => a.order - b.order);
 
@@ -88,6 +94,33 @@ export function Clips(): ReactElement {
       setExportMessage(err instanceof Error ? `Export failed: ${err.message}` : 'Export failed.');
     } finally {
       setExportProgress(null);
+    }
+  }
+
+  /** Same "thin wrapper around media/gif.ts" shape as handleExportAll above, matching
+   * export_gif's own tool handler (agent/tools/exports.ts) -- both independently call getInput +
+   * exportGif + a download trigger, neither one calling the other (same convention this panel's
+   * own doc comment already explains for handleExportAll). */
+  async function handleExportGif(): Promise<void> {
+    if (!source) return;
+    setGifMessage(null);
+    const timeCtx = { currentTime: player.currentTime, duration: player.duration, fps: player.fps };
+    const start = parseTime(gifStart || 0, timeCtx);
+    const end = parseTime(gifEnd, timeCtx);
+    if (start === null || end === null || end <= start) {
+      setGifMessage('Invalid start/end.');
+      return;
+    }
+    setGifProgress(0);
+    try {
+      const input = await getInput(source);
+      const result = await exportGif(input, { start, end, onProgress: setGifProgress });
+      triggerBlobDownload(result.blob, 'agent-video-studio-export.gif');
+      setGifMessage(`Exported GIF (${result.frames} frame(s), ${result.width}x${result.height}).`);
+    } catch (err) {
+      setGifMessage(err instanceof Error ? `Export failed: ${err.message}` : 'Export failed.');
+    } finally {
+      setGifProgress(null);
     }
   }
 
@@ -200,6 +233,25 @@ export function Clips(): ReactElement {
             {exportProgress !== null ? `Exporting... ${Math.round(exportProgress * 100)}%` : 'Export all'}
           </button>
           {exportMessage && <p className="text-[11px] text-ink-3">{exportMessage}</p>}
+        </div>
+      )}
+
+      {source && (
+        <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+          <h3 className="text-[13px] font-semibold">Export GIF</h3>
+          <div className="flex gap-1.5">
+            <input value={gifStart} onChange={(e) => setGifStart(e.target.value)} placeholder="start" className="w-16 rounded border border-line bg-surface px-1.5 py-1 font-mono text-[11px]" aria-label="GIF start" />
+            <input value={gifEnd} onChange={(e) => setGifEnd(e.target.value)} placeholder="end" className="w-16 rounded border border-line bg-surface px-1.5 py-1 font-mono text-[11px]" aria-label="GIF end" />
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleExportGif()}
+            disabled={gifProgress !== null || !gifEnd.trim()}
+            className="self-start rounded-token bg-ink px-2.5 py-1 text-[12px] font-medium text-surface disabled:opacity-50"
+          >
+            {gifProgress !== null ? `Exporting... ${Math.round(gifProgress * 100)}%` : 'Export GIF'}
+          </button>
+          {gifMessage && <p className="text-[11px] text-ink-3">{gifMessage}</p>}
         </div>
       )}
     </div>

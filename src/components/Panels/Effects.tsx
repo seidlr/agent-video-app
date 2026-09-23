@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Trash2 } from 'lucide-react';
+import { runGenerateVoiceover, runRemoveBackground } from '../../agent/tools/effects';
+import { mlClient } from '../../ml/client';
 import { secsToTimecode } from '../../lib/time';
-import { useStudio } from '../../store/studio';
+import type { MatteReplace } from '../../lib/types';
+import { studioStore, useStudio } from '../../store/studio';
+import { SizeConfirm } from '../ui/SizeConfirm';
 
 const REPLACE_LABELS: Record<'transparent' | 'color' | 'blur', string> = {
   transparent: 'Transparent',
   color: 'Color',
   blur: 'Blurred background',
 };
+
+function resolveMatteId(tier: 'portrait' | 'general'): string {
+  return `matte-${tier}`;
+}
 
 /**
  * Effects panel (Task 13): the `remove_background` effect chips and `generate_voiceover` clips an
@@ -32,12 +40,134 @@ export function Effects(): ReactElement {
     void audio.play();
   }
 
-  if (effects.length === 0 && voiceovers.length === 0) {
-    return <p className="text-[13px] text-ink-3">No effects yet -- ask the agent to call remove_background or generate_voiceover.</p>;
+  const [matteStart, setMatteStart] = useState('');
+  const [matteEnd, setMatteEnd] = useState('');
+  const [matteTier, setMatteTier] = useState<'portrait' | 'general'>('portrait');
+  const [matteReplace, setMatteReplace] = useState<MatteReplace>('transparent');
+  const [matteColor, setMatteColor] = useState('#00ff00');
+  const [matteBusy, setMatteBusy] = useState(false);
+  const [matteFeedback, setMatteFeedback] = useState<string | null>(null);
+  const [matteConfirm, setMatteConfirm] = useState<{ sizeMB: number; modelId: string } | null>(null);
+
+  const [voText, setVoText] = useState('');
+  const [voAt, setVoAt] = useState('');
+  const [voBusy, setVoBusy] = useState(false);
+  const [voFeedback, setVoFeedback] = useState<string | null>(null);
+  const [voConfirm, setVoConfirm] = useState<{ sizeMB: number; modelId: string } | null>(null);
+
+  /** Same "probe first, confirm, then run" shape as the other new buttons -- the actual pipeline
+   * lives in agent/tools/effects.ts's runRemoveBackground, shared with the remove_background
+   * tool. */
+  async function handleRemoveBackground(confirmDownload: boolean): Promise<void> {
+    if (!matteStart.trim() || !matteEnd.trim()) return;
+    const modelId = resolveMatteId(matteTier);
+    setMatteBusy(true);
+    setMatteFeedback(null);
+    try {
+      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      if (!probe.ok) {
+        if (probe.error === 'model_not_loaded') setMatteConfirm({ sizeMB: probe.sizeMB, modelId });
+        return;
+      }
+      setMatteConfirm(null);
+
+      const result = await runRemoveBackground(
+        studioStore,
+        { start: matteStart, end: matteEnd, model: matteTier, replace: matteReplace, color: matteReplace === 'color' ? matteColor : undefined, confirmDownload: true },
+        { progress: () => undefined },
+      );
+      setMatteFeedback(result.ok ? result.summary : result.error);
+    } finally {
+      setMatteBusy(false);
+      setTimeout(() => setMatteFeedback(null), 3000);
+    }
+  }
+
+  /** Same shape again -- pipeline lives in agent/tools/effects.ts's runGenerateVoiceover. */
+  async function handleGenerateVoiceover(confirmDownload: boolean): Promise<void> {
+    if (!voText.trim() || !voAt.trim()) return;
+    const modelId = 'kokoro-tts';
+    setVoBusy(true);
+    setVoFeedback(null);
+    try {
+      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      if (!probe.ok) {
+        if (probe.error === 'model_not_loaded') setVoConfirm({ sizeMB: probe.sizeMB, modelId });
+        return;
+      }
+      setVoConfirm(null);
+
+      const result = await runGenerateVoiceover(studioStore, { text: voText, at: voAt, confirmDownload: true });
+      setVoFeedback(result.ok ? result.summary : result.error);
+      if (result.ok) {
+        setVoText('');
+        setVoAt('');
+      }
+    } finally {
+      setVoBusy(false);
+      setTimeout(() => setVoFeedback(null), 3000);
+    }
   }
 
   return (
     <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-1.5 rounded-token border border-line bg-surface-2 p-2">
+        <h3 className="text-[13px] font-semibold">Remove background</h3>
+        <div className="flex flex-wrap gap-1.5">
+          <input value={matteStart} onChange={(e) => setMatteStart(e.target.value)} placeholder="start" className="w-16 rounded border border-line bg-surface px-1.5 py-1 font-mono text-[11px]" aria-label="Matte start" />
+          <input value={matteEnd} onChange={(e) => setMatteEnd(e.target.value)} placeholder="end" className="w-16 rounded border border-line bg-surface px-1.5 py-1 font-mono text-[11px]" aria-label="Matte end" />
+          <select value={matteTier} onChange={(e) => setMatteTier(e.target.value as 'portrait' | 'general')} className="rounded border border-line bg-surface px-1.5 py-1 text-[12px]" aria-label="Matting tier">
+            <option value="portrait">Portrait</option>
+            <option value="general">General</option>
+          </select>
+          <select value={matteReplace} onChange={(e) => setMatteReplace(e.target.value as MatteReplace)} className="rounded border border-line bg-surface px-1.5 py-1 text-[12px]" aria-label="Replace with">
+            <option value="transparent">Transparent</option>
+            <option value="color">Color</option>
+            <option value="blur">Blur</option>
+          </select>
+          {matteReplace === 'color' && (
+            <input type="color" value={matteColor} onChange={(e) => setMatteColor(e.target.value)} className="h-[30px] w-8 rounded border border-line bg-surface" aria-label="Replace color" />
+          )}
+        </div>
+        <button
+          type="button"
+          disabled={matteBusy || !matteStart.trim() || !matteEnd.trim()}
+          onClick={() => void handleRemoveBackground(false)}
+          className="self-start rounded-token bg-ink px-2.5 py-1 text-[12px] font-medium text-surface disabled:opacity-50"
+        >
+          {matteBusy ? 'Processing…' : 'Remove background'}
+        </button>
+        {matteConfirm && (
+          <SizeConfirm sizeMB={matteConfirm.sizeMB} label={matteConfirm.modelId} onConfirm={() => void handleRemoveBackground(true)} onCancel={() => setMatteConfirm(null)} />
+        )}
+        {matteFeedback && <p className="text-[11px] text-ink-3">{matteFeedback}</p>}
+      </div>
+
+      <div className="flex flex-col gap-1.5 rounded-token border border-line bg-surface-2 p-2">
+        <h3 className="text-[13px] font-semibold">Generate voice-over</h3>
+        <textarea
+          value={voText}
+          onChange={(e) => setVoText(e.target.value)}
+          placeholder="What should the voice-over say?"
+          rows={2}
+          className="rounded border border-line bg-surface px-1.5 py-1 text-[12.5px]"
+          aria-label="Voice-over text"
+        />
+        <div className="flex items-center gap-1.5">
+          <input value={voAt} onChange={(e) => setVoAt(e.target.value)} placeholder="at (time)" className="w-20 rounded border border-line bg-surface px-1.5 py-1 font-mono text-[11px]" aria-label="Voice-over time" />
+          <button
+            type="button"
+            disabled={voBusy || !voText.trim() || !voAt.trim()}
+            onClick={() => void handleGenerateVoiceover(false)}
+            className="rounded-token bg-ink px-2.5 py-1 text-[12px] font-medium text-surface disabled:opacity-50"
+          >
+            {voBusy ? 'Generating…' : 'Generate'}
+          </button>
+        </div>
+        {voConfirm && <SizeConfirm sizeMB={voConfirm.sizeMB} label={voConfirm.modelId} onConfirm={() => void handleGenerateVoiceover(true)} onCancel={() => setVoConfirm(null)} />}
+        {voFeedback && <p className="text-[11px] text-ink-3">{voFeedback}</p>}
+      </div>
+
       {effects.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <h3 className="text-[13px] font-semibold">Background removal</h3>

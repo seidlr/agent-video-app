@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement, RefObject } from 'react';
 import type { MediaPlayerInstance } from '@vidstack/react';
-import { Captions, Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { Camera, Captions, Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { runCaptureFrame } from '../../agent/tools/frames';
 import { secsToTimecode } from '../../lib/time';
-import { useStudio } from '../../store/studio';
+import { studioStore, useStudio } from '../../store/studio';
 import { TabCaptureButton } from './TabCaptureButton';
 
 export interface ChromeProps {
@@ -31,7 +32,24 @@ export function Chrome({ playerRef, containerRef }: ChromeProps): ReactElement {
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
   const [hasCaptions, setHasCaptions] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [captureFeedback, setCaptureFeedback] = useState<string | null>(null);
   const speedMenuRef = useRef<HTMLDivElement>(null);
+
+  // Calls the same core pipeline capture_frame uses (agent/tools/frames.ts's runCaptureFrame)
+  // directly, bypassing the registry -- a human click is not an agent action, so it never hits
+  // the Activity feed/Toast (same convention as Clips.tsx's "Export all" button).
+  async function handleCapture(): Promise<void> {
+    setCapturing(true);
+    setCaptureFeedback(null);
+    try {
+      const result = await runCaptureFrame(studioStore, {});
+      setCaptureFeedback(result.ok ? 'Captured -- see Frames panel' : result.error);
+    } finally {
+      setCapturing(false);
+      setTimeout(() => setCaptureFeedback(null), 2500);
+    }
+  }
 
   // Detect captions availability (the chapters track is NOT a captions track).
   useEffect(() => {
@@ -155,8 +173,21 @@ export function Chrome({ playerRef, containerRef }: ChromeProps): ReactElement {
         >
           <Maximize2 size={16} />
         </button>
+        <button
+          type="button"
+          onClick={() => void handleCapture()}
+          disabled={capturing}
+          aria-label="Capture current frame"
+          title="Capture current frame"
+          className="grid h-[30px] w-[30px] place-items-center rounded-md text-white/85 transition-colors hover:bg-white/15 disabled:opacity-50"
+        >
+          <Camera size={16} />
+        </button>
         {isYoutube && <TabCaptureButton />}
       </div>
+      {captureFeedback && (
+        <p className="absolute right-4 bottom-full mb-1.5 rounded bg-black/70 px-2 py-1 text-[11px] text-white/90">{captureFeedback}</p>
+      )}
     </div>
   );
 }

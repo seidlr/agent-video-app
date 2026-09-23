@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
+import { runTranscribe } from '../../agent/tools/transcript';
+import { mlClient } from '../../ml/client';
+import { resolveTranscribeId, type TranscribeTier } from '../../ml/catalog';
 import { secsToTimecode } from '../../lib/time';
 import type { TranscriptSegment } from '../../lib/types';
 import { getPersistedTranscript, listTranslatedLangs } from '../../store/transcript';
-import { useStudio } from '../../store/studio';
+import { studioStore, useStudio } from '../../store/studio';
+import { SizeConfirm } from '../ui/SizeConfirm';
 
 /**
  * Transcript panel (Task 8, TS-006 step 3/4): segment rows (click seeks), a search box, and an
@@ -64,12 +68,72 @@ export function Transcript(): ReactElement {
     setTimeout(() => setAddedAt((t) => (t === start ? null : t)), 1500);
   }
 
-  if (transcript.segments.length === 0) {
-    return <p className="text-[13px] text-ink-3">No transcript yet -- ask the agent to transcribe this video, or call `transcribe` yourself.</p>;
+  const [model, setModel] = useState<TranscribeTier>('tiny');
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeFeedback, setTranscribeFeedback] = useState<string | null>(null);
+  const [transcribeConfirm, setTranscribeConfirm] = useState<{ sizeMB: number; modelId: string } | null>(null);
+
+  /** Same "probe first, confirm, then run" shape as the other new buttons -- the actual pipeline
+   * lives in agent/tools/transcript.ts's runTranscribe, shared with the transcribe tool. */
+  async function handleTranscribe(confirmDownload: boolean): Promise<void> {
+    const modelId = resolveTranscribeId(model);
+    setTranscribing(true);
+    setTranscribeFeedback(null);
+    try {
+      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      if (!probe.ok) {
+        if (probe.error === 'model_not_loaded') setTranscribeConfirm({ sizeMB: probe.sizeMB, modelId });
+        return;
+      }
+      setTranscribeConfirm(null);
+
+      const result = await runTranscribe(studioStore, { model, confirmDownload: true });
+      setTranscribeFeedback(result.ok ? result.summary : result.error);
+    } finally {
+      setTranscribing(false);
+      setTimeout(() => setTranscribeFeedback(null), 3000);
+    }
   }
 
   return (
     <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-1.5 rounded-token border border-line bg-surface-2 p-2">
+        <h3 className="text-[13px] font-semibold">Transcribe</h3>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value as TranscribeTier)}
+            className="rounded border border-line bg-surface px-1.5 py-1 text-[12px]"
+            aria-label="Transcription tier"
+          >
+            <option value="tiny">Tiny (fast)</option>
+            <option value="base">Base</option>
+            <option value="turbo">Turbo (most accurate)</option>
+          </select>
+          <button
+            type="button"
+            disabled={transcribing}
+            onClick={() => void handleTranscribe(false)}
+            className="rounded-token bg-ink px-2.5 py-1 text-[12px] font-medium text-surface disabled:opacity-50"
+          >
+            {transcribing ? 'Transcribing…' : 'Transcribe'}
+          </button>
+        </div>
+        {transcribeConfirm && (
+          <SizeConfirm
+            sizeMB={transcribeConfirm.sizeMB}
+            label={transcribeConfirm.modelId}
+            onConfirm={() => void handleTranscribe(true)}
+            onCancel={() => setTranscribeConfirm(null)}
+          />
+        )}
+        {transcribeFeedback && <p className="text-[11px] text-ink-3">{transcribeFeedback}</p>}
+      </div>
+
+      {transcript.segments.length === 0 ? (
+        <p className="text-[13px] text-ink-3">No transcript yet -- transcribe above, or ask an agent to call `transcribe`.</p>
+      ) : (
+        <>
       <div className="flex gap-1.5">
         <input
           value={query}
@@ -117,6 +181,8 @@ export function Transcript(): ReactElement {
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );

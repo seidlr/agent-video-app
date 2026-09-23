@@ -150,6 +150,10 @@ export interface StudioState {
    * Off by default so drawing doesn't hijack the paused-state clicks Chrome/PlayOverlay need
    * (scrubbing, pressing play); the Tracking panel's "Draw box" button toggles it. */
   boxDrawMode: boolean;
+  /** Whether Stage/SegmentClickLayer.tsx is currently capturing a single click to run `segment`
+   * at that point -- the Tracking panel's "Segment" button toggles it, same on/off convention as
+   * boxDrawMode just above (mutually exclusive in the UI, not enforced here). */
+  segmentClickMode: boolean;
   /** The most recent `detect_pose` call's first detected person's 33 landmarks (normalized
    * [0,1] + z + visibility), or `null` once nothing has been detected yet -- Stage/PoseOverlay.tsx
    * reads this reactively to draw the skeleton, the same way BoxOverlay reads `boxes`. */
@@ -227,6 +231,7 @@ export interface StudioState {
 
   setModelState(id: string, patch: Partial<ModelState>): void;
   setBoxDrawMode(on: boolean): void;
+  setSegmentClickMode(on: boolean): void;
   setPoseLandmarks(landmarks: StudioState['poseLandmarks']): void;
 
   addEffect(input: Omit<Effect, 'id'>): string;
@@ -327,6 +332,7 @@ export function createStudioStore() {
     storage: { persisted: false, usage: 0, quota: 0, worksInThisContext: true },
     models: {},
     boxDrawMode: false,
+    segmentClickMode: false,
     poseLandmarks: null,
     effects: [],
     voiceovers: [],
@@ -481,6 +487,9 @@ export function createStudioStore() {
     },
     setBoxDrawMode(on) {
       set({ boxDrawMode: on });
+    },
+    setSegmentClickMode(on) {
+      set({ segmentClickMode: on });
     },
     setPoseLandmarks(landmarks) {
       set({ poseLandmarks: landmarks });

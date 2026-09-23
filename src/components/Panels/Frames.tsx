@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Trash2 } from 'lucide-react';
+import { runUpscaleFrame } from '../../agent/tools/effects';
 import { resolveVlmId } from '../../ml/catalog';
 import { mlClient } from '../../ml/client';
 import { buildDescribeFrameMessages } from '../../ml/vlmPrompts';
@@ -13,6 +14,7 @@ import { SizeConfirm } from '../ui/SizeConfirm';
 
 const VLM_MODEL_ID = resolveVlmId('default');
 const FLORENCE_MODEL_ID = 'florence2-base';
+const UPSCALE_MODEL_ID = 'swin2sr-upscale';
 
 interface GenerateWorkerResult {
   text: string;
@@ -22,7 +24,7 @@ interface FlorenceWorkerResult {
   boxes: { label: string; box: { x: number; y: number; w: number; h: number } }[];
 }
 
-type Action = 'describe' | 'read_text';
+type Action = 'describe' | 'read_text' | 'upscale';
 
 /** Turns a captured frame's own stored image (an object URL over the Dexie-persisted blob) into a
  * bitmap the VLM/Florence workers can consume -- same fetch-the-blob-URL approach
@@ -123,6 +125,29 @@ export function Frames(): ReactElement {
     }
   }
 
+  /** Same "probe first, confirm, then run" shape as runDescribe/runReadText above, but the actual
+   * upscale pipeline itself lives in agent/tools/effects.ts's runUpscaleFrame -- shared with the
+   * upscale_frame tool -- rather than duplicated here, since that pipeline (tiled inference,
+   * canvas compositing) is substantial enough that literal duplication would be a real drift
+   * risk. */
+  async function runUpscale(frame: FrameEntry, confirmDownload: boolean): Promise<void> {
+    const busyKey = `${frame.id}:upscale`;
+    setBusy(busyKey);
+    try {
+      const probe = await mlClient.ensureModel(UPSCALE_MODEL_ID, { confirmDownload, onProgress: (fraction) => setModelState(UPSCALE_MODEL_ID, { progress: fraction }) });
+      if (!probe.ok) {
+        if (probe.error === 'model_not_loaded') setConfirming({ frameId: frame.id, action: 'upscale', sizeMB: probe.sizeMB });
+        return;
+      }
+      setConfirming(null);
+
+      const result = await runUpscaleFrame(studioStore, { frameId: frame.id, confirmDownload: true });
+      showFeedback(frame.id, 'upscale', result.ok ? `Upscaled to ${result.width}x${result.height} -- see Frames panel` : result.error);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (frames.length === 0) {
     return <p className="text-[13px] text-ink-3">No frames captured yet. Ask an agent to call capture_frame, or generate a thumbnail contact sheet.</p>;
   }
@@ -148,8 +173,8 @@ export function Frames(): ReactElement {
           {confirming?.frameId === frame.id ? (
             <SizeConfirm
               sizeMB={confirming.sizeMB}
-              label={confirming.action === 'describe' ? VLM_MODEL_ID : FLORENCE_MODEL_ID}
-              onConfirm={() => void (confirming.action === 'describe' ? runDescribe(frame, true) : runReadText(frame, true))}
+              label={confirming.action === 'describe' ? VLM_MODEL_ID : confirming.action === 'read_text' ? FLORENCE_MODEL_ID : UPSCALE_MODEL_ID}
+              onConfirm={() => void (confirming.action === 'describe' ? runDescribe(frame, true) : confirming.action === 'read_text' ? runReadText(frame, true) : runUpscale(frame, true))}
               onCancel={() => setConfirming(null)}
             />
           ) : (
@@ -170,6 +195,16 @@ export function Frames(): ReactElement {
               >
                 {busy === `${frame.id}:read_text` ? 'Reading…' : 'Read text'}
               </button>
+              {frame.kind !== 'upscaled' && (
+                <button
+                  type="button"
+                  disabled={busy === `${frame.id}:upscale`}
+                  onClick={() => void runUpscale(frame, false)}
+                  className="rounded px-1.5 py-0.5 text-ink-2 hover:bg-line disabled:opacity-50"
+                >
+                  {busy === `${frame.id}:upscale` ? 'Upscaling…' : 'Upscale'}
+                </button>
+              )}
             </div>
           )}
           {feedback?.frameId === frame.id && <p className="text-[10.5px] text-good">{feedback.text}</p>}

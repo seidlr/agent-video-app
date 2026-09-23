@@ -44,6 +44,65 @@ type GetTranscriptArgs = {
 
 type SearchTranscriptArgs = { query: string; lang?: string } & Record<string, unknown>;
 
+/** Core logic behind `transcribe`, extracted so a human-driven UI action (a "Transcribe" button)
+ * can call the exact same pipeline the tool uses without going through the registry -- the
+ * Activity feed and its Toast are reserved for what an *agent* did (see Clips.tsx/Frames.tsx's own
+ * comments on this same convention), not a running log of human clicks. */
+export async function runTranscribe(store: StudioStore, args: TranscribeArgs): Promise<ToolResult> {
+  const state = store.getState();
+  if (!state.source) return { ok: false, error: 'no_video_loaded' };
+  if (state.source.kind === 'youtube') {
+    return { ok: false, error: 'transcribe_unavailable_on_youtube', hint: 'Needs direct audio access; not available for a YouTube source.' };
+  }
+
+  const timeCtx = { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps };
+  const from = args.from !== undefined ? parseTime(args.from, timeCtx) : 0;
+  const to = args.to !== undefined ? parseTime(args.to, timeCtx) : state.player.duration;
+  if (from === null || to === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
+  if (to <= from) return { ok: false, error: 'invalid_range', hint: '`to` must be after `from`.' };
+
+  const modelId = resolveTranscribeId(args.model);
+  const ensured = await mlClient.ensureModel(modelId, {
+    confirmDownload: args.confirmDownload,
+    onProgress: (fraction) => store.getState().setModelState(modelId, { progress: fraction }),
+  });
+  if (!ensured.ok) {
+    if (ensured.error === 'unknown_model') return { ok: false, error: 'unknown_model', hint: `no model with id "${modelId}"` };
+    return { ok: false, error: ensured.error, hint: ensured.hint };
+  }
+  store.getState().setModelState(modelId, { loaded: true, cached: true, progress: 1 });
+
+  let samples: Float32Array;
+  try {
+    const extracted = await extractAudioPcm(state.source, { start: from, end: to });
+    samples = extracted.samples;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith('no_audio_track')) return { ok: false, error: 'no_audio_track', hint: 'This source has no audio track to transcribe.' };
+    throw error;
+  }
+
+  const { segments: relativeSegments } = await ensured.worker.call<WorkerTranscribeResult>('transcribe', { samples, language: args.language });
+  // The worker only ever sees the trimmed [from,to) clip, so its segment timestamps are
+  // relative to that clip's own start -- shift back to the video's absolute timeline.
+  const segments: TranscriptSegment[] = relativeSegments.map((s) => ({
+    start: s.start + from,
+    end: s.end + from,
+    text: s.text,
+    words: s.words?.map((w) => ({ start: w.start + from, end: w.end + from, text: w.text })),
+  }));
+
+  const merged = mergeSegments(state.transcript.segments, from, to, segments);
+  store.getState().setTranscript(merged, null);
+  if (state.source.assetId) await tryPersist(store.getState(), () => persistTranscript(state.source!.assetId!, null, merged));
+
+  return {
+    ok: true,
+    summary: `Transcribed ${secsToTimecode(from)}-${secsToTimecode(to)}: ${segments.length} segment(s)`,
+    segments,
+  };
+}
+
 /**
  * transcript tools: transcribe (`local`, job-mode -- real ASR inference), get_transcript/
  * search_transcript (`after-transcribe` -- see agent/webmcp.ts's own transcript-aware
@@ -67,60 +126,7 @@ export function defineTranscriptTools(registry: Registry, store: StudioStore): v
     group: 'transcript',
     when: 'local',
     mode: 'job',
-    handler: async (args): Promise<ToolResult> => {
-      const state = store.getState();
-      if (!state.source) return { ok: false, error: 'no_video_loaded' };
-      if (state.source.kind === 'youtube') {
-        return { ok: false, error: 'transcribe_unavailable_on_youtube', hint: 'Needs direct audio access; not available for a YouTube source.' };
-      }
-
-      const timeCtx = { currentTime: state.player.currentTime, duration: state.player.duration, fps: state.player.fps };
-      const from = args.from !== undefined ? parseTime(args.from, timeCtx) : 0;
-      const to = args.to !== undefined ? parseTime(args.to, timeCtx) : state.player.duration;
-      if (from === null || to === null) return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
-      if (to <= from) return { ok: false, error: 'invalid_range', hint: '`to` must be after `from`.' };
-
-      const modelId = resolveTranscribeId(args.model);
-      const ensured = await mlClient.ensureModel(modelId, {
-        confirmDownload: args.confirmDownload,
-        onProgress: (fraction) => store.getState().setModelState(modelId, { progress: fraction }),
-      });
-      if (!ensured.ok) {
-        if (ensured.error === 'unknown_model') return { ok: false, error: 'unknown_model', hint: `no model with id "${modelId}"` };
-        return { ok: false, error: ensured.error, hint: ensured.hint };
-      }
-      store.getState().setModelState(modelId, { loaded: true, cached: true, progress: 1 });
-
-      let samples: Float32Array;
-      try {
-        const extracted = await extractAudioPcm(state.source, { start: from, end: to });
-        samples = extracted.samples;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.startsWith('no_audio_track')) return { ok: false, error: 'no_audio_track', hint: 'This source has no audio track to transcribe.' };
-        throw error;
-      }
-
-      const { segments: relativeSegments } = await ensured.worker.call<WorkerTranscribeResult>('transcribe', { samples, language: args.language });
-      // The worker only ever sees the trimmed [from,to) clip, so its segment timestamps are
-      // relative to that clip's own start -- shift back to the video's absolute timeline.
-      const segments: TranscriptSegment[] = relativeSegments.map((s) => ({
-        start: s.start + from,
-        end: s.end + from,
-        text: s.text,
-        words: s.words?.map((w) => ({ start: w.start + from, end: w.end + from, text: w.text })),
-      }));
-
-      const merged = mergeSegments(state.transcript.segments, from, to, segments);
-      store.getState().setTranscript(merged, null);
-      if (state.source.assetId) await tryPersist(store.getState(), () => persistTranscript(state.source!.assetId!, null, merged));
-
-      return {
-        ok: true,
-        summary: `Transcribed ${secsToTimecode(from)}-${secsToTimecode(to)}: ${segments.length} segment(s)`,
-        segments,
-      };
-    },
+    handler: (args) => runTranscribe(store, args),
   });
 
   registry.define<GetTranscriptArgs>({

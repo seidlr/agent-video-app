@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
+import { runDetectObjects, runDetectScenes } from '../../agent/tools/vision';
+import { getMlQueryOverrides, mlClient } from '../../ml/client';
+import { pickDetectModel } from '../../ml/catalog';
 import { secsToTimecode } from '../../lib/time';
-import { useStudio, type VisionResult } from '../../store/studio';
+import { studioStore, useStudio, type VisionResult } from '../../store/studio';
+import { SizeConfirm } from '../ui/SizeConfirm';
 
 const KIND_LABELS: Record<VisionResult['kind'], string> = {
   describe: 'Frame description',
@@ -36,6 +40,55 @@ export function Vision(): ReactElement {
   const [noteFeedback, setNoteFeedback] = useState<string | null>(null);
   const [chapterFeedback, setChapterFeedback] = useState<{ id: string; error: boolean } | null>(null);
 
+  const [scenesBusy, setScenesBusy] = useState(false);
+  const [scenesFeedback, setScenesFeedback] = useState<string | null>(null);
+  const [objectsBusy, setObjectsBusy] = useState(false);
+  const [objectsFeedback, setObjectsFeedback] = useState<string | null>(null);
+  const [objectLabels, setObjectLabels] = useState('');
+  const [detectConfirm, setDetectConfirm] = useState<{ sizeMB: number; modelId: string } | null>(null);
+
+  async function handleDetectScenes(): Promise<void> {
+    setScenesBusy(true);
+    setScenesFeedback(null);
+    try {
+      const result = await runDetectScenes(studioStore, { addChapters: true });
+      setScenesFeedback(result.ok ? result.summary : result.error);
+    } finally {
+      setScenesBusy(false);
+      setTimeout(() => setScenesFeedback(null), 3000);
+    }
+  }
+
+  /** Same "probe first, confirm, then run" shape as Frames.tsx's own upscale button -- the actual
+   * pipeline lives in agent/tools/vision.ts's runDetectObjects, shared with the detect_objects
+   * tool. */
+  async function handleDetectObjects(confirmDownload: boolean): Promise<void> {
+    const labels = objectLabels
+      .split(',')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const zeroShot = labels.length > 0;
+    const webgpu = studioStore.getState().capabilities.webgpu;
+    const modelId = zeroShot ? 'grounding-dino-tiny' : pickDetectModel(webgpu, getMlQueryOverrides().forceWasm).id;
+
+    setObjectsBusy(true);
+    setObjectsFeedback(null);
+    try {
+      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      if (!probe.ok) {
+        if (probe.error === 'model_not_loaded') setDetectConfirm({ sizeMB: probe.sizeMB, modelId });
+        return;
+      }
+      setDetectConfirm(null);
+
+      const result = await runDetectObjects(studioStore, { labels: zeroShot ? labels : undefined, addBoxes: true, confirmDownload: true });
+      setObjectsFeedback(result.ok ? result.summary : result.error);
+    } finally {
+      setObjectsBusy(false);
+      setTimeout(() => setObjectsFeedback(null), 3000);
+    }
+  }
+
   function handleAddNote(r: VisionResult): void {
     addNote({ time: r.time, text: r.text, tags: [r.kind], createdBy: 'agent' });
     setNoteFeedback(r.id);
@@ -58,6 +111,47 @@ export function Vision(): ReactElement {
 
   return (
     <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-1.5 rounded-token border border-line bg-surface-2 p-2">
+        <h3 className="text-[13px] font-semibold">Detect</h3>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            disabled={scenesBusy}
+            onClick={() => void handleDetectScenes()}
+            className="rounded-token bg-ink px-2.5 py-1 text-[12px] font-medium text-surface disabled:opacity-50"
+          >
+            {scenesBusy ? 'Detecting…' : 'Detect scenes'}
+          </button>
+          {scenesFeedback && <span className="text-[11px] text-ink-3">{scenesFeedback}</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input
+            value={objectLabels}
+            onChange={(e) => setObjectLabels(e.target.value)}
+            placeholder="Labels (optional), e.g. a red car, a person"
+            className="min-w-0 flex-1 rounded border border-line bg-surface px-1.5 py-1 text-[12px]"
+            aria-label="Zero-shot detection labels"
+          />
+          <button
+            type="button"
+            disabled={objectsBusy}
+            onClick={() => void handleDetectObjects(false)}
+            className="rounded-token bg-ink px-2.5 py-1 text-[12px] font-medium text-surface disabled:opacity-50"
+          >
+            {objectsBusy ? 'Detecting…' : 'Detect objects'}
+          </button>
+        </div>
+        {detectConfirm && (
+          <SizeConfirm
+            sizeMB={detectConfirm.sizeMB}
+            label={detectConfirm.modelId}
+            onConfirm={() => void handleDetectObjects(true)}
+            onCancel={() => setDetectConfirm(null)}
+          />
+        )}
+        {objectsFeedback && <p className="text-[11px] text-ink-3">{objectsFeedback}</p>}
+      </div>
+
       {hasVisionResults && (
         <div className="flex flex-col gap-1.5">
           <h3 className="text-[13px] font-semibold">Vision results</h3>
