@@ -42,6 +42,11 @@ export function Timeline(): ReactElement {
 
   return (
     <div className="px-1.5 pt-1">
+      {/* Vidstack only publishes slider geometry as CSS variables, it never applies them: the plain
+          track reads --slider-fill/--slider-progress, and each chapter segment reads its own
+          --chapter-fill/--chapter-progress while vidstack sizes the segment itself via an inline
+          `width` (so no flex-1 here, which would override it with equal widths). Without these
+          w-[var(--...)] classes every fill renders 0px wide and seeks are invisible. */}
       {/* TimeSlider.Root seeks the underlying media element itself on drag/click; the store's
           currentTime snapshot follows via VideoStage's onTimeUpdate, so no extra handler here. */}
       <TimeSlider.Root className="group relative flex w-full cursor-pointer touch-none flex-col pt-3 pb-1.5 outline-none select-none">
@@ -56,24 +61,26 @@ export function Timeline(): ReactElement {
                   <TimeSlider.Track
                     key={`${cue.startTime}-${i}`}
                     ref={forwardRef}
-                    className="relative h-1 flex-1 overflow-hidden rounded-sm bg-line-2"
+                    data-testid="timeline-chapter-track"
+                    className="relative h-1 overflow-hidden rounded-sm bg-line-2"
                   >
-                    <TimeSlider.TrackFill className="absolute inset-y-0 left-0 bg-clay" />
-                    <TimeSlider.Progress className="absolute inset-y-0 left-0 bg-line opacity-70" />
+                    <TimeSlider.TrackFill data-testid="timeline-chapter-fill" className="absolute inset-y-0 left-0 w-[var(--chapter-fill)] bg-clay" />
+                    <TimeSlider.Progress className="absolute inset-y-0 left-0 w-[var(--chapter-progress)] bg-line opacity-70" />
                   </TimeSlider.Track>
                 ))
               }
             </TimeSlider.Chapters>
           ) : (
-            <TimeSlider.Track className="absolute inset-x-0 inset-y-0 overflow-hidden rounded-sm bg-line-2">
-              <TimeSlider.TrackFill className="absolute inset-y-0 left-0 bg-clay" />
-              <TimeSlider.Progress className="absolute inset-y-0 left-0 bg-line opacity-70" />
+            <TimeSlider.Track data-testid="timeline-track" className="absolute inset-x-0 inset-y-0 overflow-hidden rounded-sm bg-line-2">
+              <TimeSlider.TrackFill data-testid="timeline-fill" className="absolute inset-y-0 left-0 w-[var(--slider-fill)] bg-clay" />
+              <TimeSlider.Progress className="absolute inset-y-0 left-0 w-[var(--slider-progress)] bg-line opacity-70" />
             </TimeSlider.Track>
           )}
         </div>
 
         <TimeSlider.Thumb
-          className="absolute z-20 h-3 w-3 -ml-1.5 rounded-full border-2 border-surface bg-clay opacity-0 shadow-[0_1px_4px_rgba(31,30,28,0.18)] transition-opacity group-hover:opacity-100 group-data-[active]:opacity-100"
+          data-testid="timeline-thumb"
+          className="absolute left-[var(--slider-fill)] z-20 h-3 w-3 -ml-1.5 rounded-full border-2 border-surface bg-clay opacity-0 shadow-[0_1px_4px_rgba(31,30,28,0.18)] transition-opacity group-hover:opacity-100 group-data-[active]:opacity-100"
           style={{ top: '14px' }}
         />
 
