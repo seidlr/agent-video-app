@@ -21,6 +21,7 @@ Three directions were explored on one canvas (`explorations/directions.dc.html`,
 | Frames & Tracking | [`screens/03-frames-tracking.dc.html`](https://claude.ai/design/p/c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48?file=screens%2F03-frames-tracking.dc.html) | Frames grid with a "saved to Downloads" badge, track keyframe list with scores, Models panel with cached/loaded state |
 | Transcript, Notes & Export | [`screens/04-transcript-notes-export.dc.html`](https://claude.ai/design/p/c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48?file=screens%2F04-transcript-notes-export.dc.html) | Transcript with a search hit highlighted, Markdown export preview with format switcher |
 | MCP App — inline & PiP | [`screens/05-mcp-app-inline-pip.dc.html`](https://claude.ai/design/p/c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48?file=screens%2F05-mcp-app-inline-pip.dc.html) | The studio rendered inline inside a Claude Desktop chat bubble, and the compact PiP variant popped out |
+| Studio v2 (current shell) | [`screens/06-studio-v2.dc.html`](https://claude.ai/design/p/c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48?file=screens%2F06-studio-v2.dc.html) | Grouped nav rail, agent-presence chip, labelled timeline lanes, readable Activity cards. Supersedes 01's shell; see [Studio v2](#studio-v2-2026-09-25) |
 | Token sheet | [`system/tokens.dc.html`](https://claude.ai/design/p/c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48?file=system%2Ftokens.dc.html) | Light + dark swatches, type specimens, radius/spacing notes, dark-mode reference frame |
 
 Every write above returned `verification.verified: true` from the CLI's own render gate (byte-for-byte readback + render check) at push time (2026-09-14).
@@ -53,14 +54,14 @@ Every write above returned `verification.verified: true` from the CLI's own rend
 
 ## Component inventory (for Tasks 3–13 to build against)
 
-- **TopBar** — brand mark (serif "A" on `clay`), wordmark, breadcrumb, theme toggle, agent-transport pill (green "MCP App · connected" / neutral "No agent connected").
+- **TopBar** — brand mark (serif "A" on `clay`), wordmark, breadcrumb, the agent-presence chip (transport · the agent's latest call, updating in place · call count; opens Activity), theme toggle.
 - **Stage** — dark video surface, top-left uppercase mono scene badge with a small dot, bottom gradient chrome bar (mono timestamp, progress track with `clay` fill, speed/volume/fullscreen icons), box overlays (`#4fb3d9` blue, distinct from `clay` so agent-drawn boxes never blend into UI chrome) with a mono label chip, translucent mask fill.
-- **Filmstrip** — row of thumbnail tiles under the stage, current tile outlined in `clay`.
-- **Timeline** — track with chapter ticks (`clay`, tall), note ticks (`ink-4`, short), a track-range bar (`#4fb3d9`), and a mono legend line with live counts.
-- **Rail / tabs** — `Activity · Notes · Tracking · Vision · Transcript · Models · Skill`, active tab lifted onto the page background.
-- **Activity feed / tool-call card** — colored status dot, tool name in mono, a status pill (`good-soft` done, `clay-soft` running, `chip` idle/error), one line of result detail.
+- **Filmstrip** — row of thumbnail tiles; since v2 it is the timeline's Frames lane.
+- **Timeline** — since v2 a card of labelled lanes (Frames, Chapters as titled blocks, Marks for notes/boxes/tracks/scene cuts, Clips, Time) with a `clay` playhead across all of them, and a mono legend line with live counts.
+- **Rail** — since v2 a 70px nav column in three groups (Media: Library, Notes, Frames, Clips · Analyze: Tracking, Vision, Transcript, Effects · Agent: Activity, Models, Skill), icon over label, active item lifted onto `surface`; the panel has a title and a one-line count.
+- **Activity feed / tool-call card** — colored status dot, tool name in mono, a status pill (`good-soft` done, `clay-soft` running, `chip` error), the tool's own summary sentence, transport chip and time, and the raw args/result JSON behind a Details toggle in the dark mono block.
 - **Frame card** — dark thumbnail, mono timestamp badge, green "saved" badge when downloaded, filename + size row.
-- **Model row** — name, size in mono, a status pill (`good-soft` loaded, `chip` cached, `surface-2` not loaded) — this is the visual contract for the on-demand loading rule in Global Constraints.
+- **Model row** — name, a status pill (`good-soft` loaded, `chip` cached, `surface-2` not loaded) and Load/Unload on one line; family · device · size · license below — the visual contract for the on-demand loading rule in Global Constraints.
 - **Export panel** — format switcher chips (`clay` selected), dark mono preview pane matching a terminal, not the light theme (deliberate contrast so exported text reads as "data").
 - **MCP App card** — same Stage/chrome vocabulary at a smaller scale, framed inside a host chat bubble; a separate compact PiP card at 260px wide with a minimal chrome row.
 
@@ -77,7 +78,8 @@ Every write above returned `verification.verified: true` from the CLI's own rend
 
 Decision (user-confirmed): the five Task 1 screens stay the **design-of-record**; the panels added
 after Task 6 (Vision, Clips, Effects, the click-to-run controls, ...) have no mockup and are
-implemented against the same token/component vocabulary. Every screen has now been compared
+implemented against the same token/component vocabulary. `06-studio-v2` (2026-09-25, below)
+supersedes 01's shell; 02-05 still stand for their own surfaces. Every screen has now been compared
 against the live app; all reviews are **review only, no apply** -- the design project was not
 modified and nothing was moved into code.
 
@@ -112,6 +114,34 @@ Differences found (deliberate unless marked otherwise; none reconciled back to t
 Found while doing this review and fixed (see the plan's Deviations): the `<video>` rendered at its
 intrinsic size instead of filling the stage, so boxes and masks (percent-positioned on the stage) sat
 off the object whenever the video was smaller than the stage.
+
+## Studio v2 (2026-09-25)
+
+User request: use Claude Design to make the app nicer to use for humans and agents, with "not so
+many toasts". One direction inside the existing token system (the 1a/1b palettes are the user's
+earlier choice and were not reopened), drafted as `screens/06-studio-v2.dc.html` (verified push,
+etag `1790370449803084`) and then implemented. What it changes, and why:
+
+- **Grouped nav rail** instead of eleven tabs wrapping to three rows in a 392px rail.
+- **One agent-presence chip** in the top bar instead of a toast per tool call: the agent's latest
+  call updates in place, so a burst of calls never covers the video. The Activity nav item shows a
+  pulsing dot while a call is running.
+- **Labelled timeline lanes** with chapter titles and a playhead across every lane, instead of a
+  thin bar with unlabelled ticks.
+- **Readable Activity cards**: the tool's own summary sentence first, raw JSON on demand.
+- **Copy**: no internal plan jargon ("(Task 9)") in the Library's storage note; an unknown
+  duration is omitted rather than shown as "…". The rail opens on Library, where the empty-state
+  explainer sends a newcomer.
+
+Decided while implementing, beyond the mock:
+
+- The Time lane is always one continuous scrub bar. Vidstack's segmented `TimeSlider.Chapters` kept
+  stale per-segment fills when chapters were added one at a time (a later segment filling to an
+  earlier one's percentage); the Chapters lane now carries the segmentation.
+- Below 1024px (an inline MCP App card, a narrow window) the rail stacks under the video instead of
+  squeezing it, and the top bar drops the wordmark, breadcrumb and call count in that order; at PiP
+  size the chip still shows the latest call.
+- Models became compact rows (not in the mock, same vocabulary).
 
 ## Visual rules for implementation
 
