@@ -163,7 +163,7 @@ export function Library(): ReactElement {
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{a.name}</div>
                     <div className="text-ink-3">
-                      {a.duration > 0 ? secsToTimecode(a.duration) : '…'} · {formatBytes(a.bytes)}
+                      {a.duration > 0 ? `${secsToTimecode(a.duration)} · ` : ''}{formatBytes(a.bytes)}
                     </div>
                   </div>
                 </button>
@@ -209,7 +209,7 @@ export function Library(): ReactElement {
         )}
         {!persisted && (
           <p className="mt-1 text-warn">
-            Your browser may delete these videos if you don&apos;t return for a while or disk gets full. Export your project to keep it (Task 9).
+            Your browser may clear these videos if you don&apos;t come back for a while or the disk fills up. Export the project to keep a copy.
           </p>
         )}
       </div>

@@ -46,57 +46,69 @@ export function Models(): ReactElement {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {MODEL_CATALOG.map((entry) => {
-        const state = models[entry.id] ?? { cached: false, loaded: false, progress: 0 };
-        const sizeMB = sizesMB[entry.id] ?? entry.approxMB;
-        const statusLabel = state.loaded ? 'loaded' : state.cached ? 'cached' : 'not loaded';
-        const statusClass = state.loaded ? 'bg-good-soft text-good' : state.cached ? 'bg-chip text-ink-2' : 'bg-surface-2 text-ink-3';
+    <div className="flex flex-col gap-2.5">
+      <p className="text-[12px] leading-snug text-ink-3">
+        Models download only when you or your agent ask for them, then stay cached in this browser.
+      </p>
+      <div className="flex flex-col divide-y divide-line overflow-hidden rounded-token border border-line bg-surface">
+        {MODEL_CATALOG.map((entry) => {
+          const state = models[entry.id] ?? { cached: false, loaded: false, progress: 0 };
+          const sizeMB = sizesMB[entry.id] ?? entry.approxMB;
+          const statusLabel = state.loaded ? 'loaded' : state.cached ? 'cached' : 'not loaded';
+          const statusClass = state.loaded ? 'bg-good-soft text-good' : state.cached ? 'bg-chip text-ink-2' : 'bg-surface-2 text-ink-3';
+          const loading = state.progress > 0 && state.progress < 1;
 
-        return (
-          <div key={entry.id} className="rounded-token border border-line bg-surface-2 p-2.5 text-[12.5px]">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate font-medium">{entry.id}</div>
-                <div className="truncate text-[11px] text-ink-3">
-                  {entry.family} · {sizeMB} MB · {entry.license} · {entry.device}
+          return (
+            <div key={entry.id} className="flex flex-col gap-1 px-3 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="min-w-0 flex-1 truncate text-[12.5px] font-medium" title={entry.id}>
+                  {entry.id}
                 </div>
+                <span className={`flex-none rounded px-1.5 py-0.5 font-mono text-[10px] ${statusClass}`}>{statusLabel}</span>
+                {confirmingId !== entry.id &&
+                  (state.loaded ? (
+                    <button
+                      type="button"
+                      onClick={() => handleUnload(entry.id)}
+                      className="flex-none rounded-md border border-line px-2 py-0.5 text-[11.5px] text-ink-2 hover:bg-surface-2"
+                    >
+                      Unload
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void handleLoad(entry.id, false)}
+                      className="flex-none rounded-md border border-line px-2 py-0.5 text-[11.5px] text-ink-2 hover:bg-surface-2 disabled:opacity-50"
+                    >
+                      Load
+                    </button>
+                  ))}
               </div>
-              <span className={`flex-none rounded px-1.5 py-0.5 font-mono text-[10.5px] ${statusClass}`}>{statusLabel}</span>
-            </div>
 
-            {state.progress > 0 && state.progress < 1 && (
-              <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface">
-                <div className="h-full bg-clay transition-[width]" style={{ width: `${state.progress * 100}%` }} />
+              <div className="font-mono text-[10.5px] text-ink-3">
+                {entry.family} · {entry.device} · <span className="tabular-nums">{sizeMB < 10 ? sizeMB.toFixed(1) : Math.round(sizeMB)} MB</span> · {entry.license}
               </div>
-            )}
 
-            {errors[entry.id] && (
-              <p role="alert" className="mt-1.5 text-[11.5px] text-clay-ink">
-                {errors[entry.id]}
-              </p>
-            )}
+              {loading && (
+                <div className="h-1 overflow-hidden rounded-full bg-surface-2">
+                  <div className="h-full bg-clay transition-[width]" style={{ width: `${state.progress * 100}%` }} />
+                </div>
+              )}
 
-            {confirmingId === entry.id ? (
-              <div className="mt-1.5">
+              {errors[entry.id] && (
+                <p role="alert" className="text-[11.5px] text-clay-ink">
+                  {errors[entry.id]}
+                </p>
+              )}
+
+              {confirmingId === entry.id && (
                 <SizeConfirm sizeMB={sizeMB} label={entry.id} onConfirm={() => void handleLoad(entry.id, true)} onCancel={() => setConfirmingId(null)} />
-              </div>
-            ) : (
-              <div className="mt-1.5">
-                {state.loaded ? (
-                  <button type="button" onClick={() => handleUnload(entry.id)} className="rounded px-2 py-1 text-ink-2 hover:bg-line">
-                    Unload
-                  </button>
-                ) : (
-                  <button type="button" onClick={() => void handleLoad(entry.id, false)} className="rounded px-2 py-1 text-ink-2 hover:bg-line">
-                    Load
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

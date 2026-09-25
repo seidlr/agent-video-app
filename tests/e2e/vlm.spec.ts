@@ -24,7 +24,7 @@ async function duration(page: Page): Promise<number> {
  * (6-8s). See scripts/fixture-gen-client.ts's own SCENES table. */
 async function loadFixtureAndWaitReady(page: Page): Promise<void> {
   await page.goto('/');
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
   await page.setInputFiles('#video-file', FIXTURE_PATH);
   await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
   await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);
@@ -110,14 +110,14 @@ test.describe('Frames panel: Describe button, real model download @ml', () => {
     const vlmDefault = (listed.models as { id: string; sizeMB: number }[]).find((m) => m.id === 'vlm-default');
     expect(vlmDefault).toBeDefined();
 
-    await page.locator('button', { hasText: 'Frames' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Frames', exact: true }).click();
     await page.locator('button', { hasText: 'Describe' }).click();
     await expect(page.getByText(`~${vlmDefault!.sizeMB} MB`)).toBeVisible();
 
     await page.locator('button', { hasText: 'Download' }).click();
     await expect(page.getByText('Described -- see Vision panel')).toBeVisible({ timeout: 120_000 });
 
-    await page.locator('button', { hasText: 'Vision' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Vision', exact: true }).click();
     await expect(page.getByText('Frame description', { exact: false })).toBeVisible();
   });
 });
@@ -135,7 +135,7 @@ test.describe('Frames panel: Read text buttons (Task 12 DoD)', () => {
     const florence = (listed.models as { id: string; sizeMB: number }[]).find((m) => m.id === 'florence2-base');
     expect(florence).toBeDefined();
 
-    await page.locator('button', { hasText: 'Frames' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Frames', exact: true }).click();
     await page.locator('button', { hasText: 'Read text' }).click();
     await expect(page.getByText(`~${florence!.sizeMB} MB`)).toBeVisible();
 

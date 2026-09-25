@@ -4,7 +4,8 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**'] },
+  // .open-claude-design/ is the git-ignored Claude Design CLI workspace (pulled screens, render scripts).
+  { ignores: ['**/dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**', '.open-claude-design/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

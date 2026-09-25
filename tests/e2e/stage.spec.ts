@@ -11,7 +11,7 @@ test.describe('video stage', () => {
   // is smaller than the stage, which is what exposes a video left at its intrinsic size.
   test('the video fills the stage, so normalized overlay coordinates line up with the picture', async ({ page }) => {
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.setInputFiles('#video-file', FIXTURE_PATH);
     await expect(page.locator('video')).toBeVisible();
 

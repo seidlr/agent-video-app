@@ -30,7 +30,7 @@ describe('createStudioStore', () => {
     expect(s.clips).toEqual([]);
     expect(s.activity).toEqual([]);
     expect(s.ui.theme).toBe('system');
-    expect(s.ui.panel).toBe('activity');
+    expect(s.ui.panel).toBe('library');
     expect(s.ui.agentTransport).toBe('none');
     expect(s.ui.agentInstanceActive).toBe(true);
     expect(s.storage.persisted).toBe(false);

@@ -24,7 +24,7 @@ async function duration(page: Page): Promise<number> {
  * real spoken pangram ("The quick brown fox jumps over the lazy dog") mixed in at 5-7.5s. */
 async function loadFixtureAndWaitReady(page: Page): Promise<void> {
   await page.goto('/');
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
   await page.setInputFiles('#video-file', FIXTURE_PATH);
   await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
   await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);
@@ -132,7 +132,7 @@ test.describe('generate_voiceover (Task 13 DoD) @ml', () => {
     expect(vo.durationSeconds as number).toBeGreaterThan(0.3);
     expect(vo.durationSeconds as number).toBeLessThan(3);
 
-    await page.locator('button', { hasText: 'Effects' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Effects', exact: true }).click();
     await expect(page.getByText('Hello agent')).toBeVisible();
 
     await execTool(page, 'add_clip', { start: '0', end: '4' });
@@ -184,7 +184,7 @@ test.describe('upscale_frame (Task 13 DoD)', () => {
     expect(upscaled.width).toBe(1280);
     expect(upscaled.height).toBe(720);
 
-    await page.locator('button', { hasText: 'Frames' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Frames', exact: true }).click();
     await expect(page.getByText('1280x720', { exact: false })).toBeVisible();
   });
 });
@@ -231,7 +231,7 @@ test.describe('transcribe tiers and translate_transcript (Task 13 DoD) @ml', () 
     expect(asSrt.ok).toBe(true);
     expect(asSrt.text as string).toMatch(/-->/);
 
-    await page.locator('button', { hasText: 'Transcript' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Transcript', exact: true }).click();
     await expect(page.getByLabel('Transcript language')).toBeVisible();
   });
 

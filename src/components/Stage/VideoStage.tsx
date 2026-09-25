@@ -10,10 +10,8 @@ import { Chrome } from './Chrome';
 import { FrameLabel } from './FrameLabel';
 import { FrameTitle } from './FrameTitle';
 import { PlayOverlay } from './PlayOverlay';
-import { Filmstrip } from '../Timeline/Filmstrip';
 import { Timeline } from '../Timeline/Timeline';
 import { chaptersToVttDataUrl } from '../../lib/chapters';
-import { buildFilmstripTileStyles } from '../../media/thumbnails';
 import { updateAssetMetadata } from '../../store/library';
 import { useStudio } from '../../store/studio';
 
@@ -55,16 +53,6 @@ export function VideoStage(): ReactElement {
   // same as the reference project's own `key={vttUrl}` (../agent-video-player/src/components/
   // VideoStage/VideoStage.tsx:194).
   const chaptersVttUrl = useMemo(() => chaptersToVttDataUrl(chapters), [chapters]);
-
-  // The mediabunny-generated sprite (generate_thumbnails, Task 5) backs the real Filmstrip strip
-  // for a local/URL source; YouTube keeps its separate source.filmstripUrls (4 ytimg stills) --
-  // the two are mutually exclusive per source.
-  const spriteUrl = source?.thumbnailsSpriteUrl;
-  const spriteTimestamps = source?.thumbnailsTimestamps;
-  const filmstripTiles = useMemo(
-    () => (spriteTimestamps ? buildFilmstripTileStyles(spriteTimestamps) : []),
-    [spriteTimestamps],
-  );
 
   useEffect(() => {
     registerPlayer(playerRef.current);
@@ -236,12 +224,11 @@ export function VideoStage(): ReactElement {
         <PlayOverlay hidden={hasPlayed} onPlay={() => void handlePlayClick()} />
         <Chrome playerRef={playerRef} containerRef={containerRef} />
       </div>
-      {source.filmstripUrls && <Filmstrip urls={source.filmstripUrls} />}
-      {spriteUrl && <Filmstrip sprite={{ url: spriteUrl, tiles: filmstripTiles }} />}
       {/* Timeline uses vidstack's TimeSlider, which needs to be inside MediaPlayer's context
           tree to read player state -- it must stay a MediaPlayer child, not a page-level sibling
-          (ported layout from ../agent-video-player/VideoStage.tsx:202-204). */}
-      <div className="mt-3.5">
+          (ported layout from ../agent-video-player/VideoStage.tsx:202-204). It also carries the
+          filmstrip as its Frames lane. */}
+      <div className="mt-3">
         <Timeline />
       </div>
     </MediaPlayer>

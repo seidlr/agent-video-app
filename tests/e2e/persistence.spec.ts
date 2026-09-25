@@ -32,7 +32,7 @@ test.describe('reload persistence (Verification bullet #2)', () => {
   test('notes, chapters, boxes, and frames all survive a full page reload for a local file source', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.setInputFiles('#video-file', FIXTURE_PATH);
     await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
     await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);
@@ -67,14 +67,14 @@ test.describe('reload persistence (Verification bullet #2)', () => {
 
     // The restored UI, not just the tool-level JSON, actually shows the data (matching this
     // suite's own "interaction evidence" standard elsewhere).
-    await page.locator('button', { hasText: 'Notes' }).first().click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Notes', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Seek to note: reload-survives-note' })).toBeVisible();
   });
 
   test('transcript survives a full page reload @ml', async ({ page }) => {
     test.setTimeout(120_000);
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.setInputFiles('#video-file', FIXTURE_PATH);
     await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
     await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);

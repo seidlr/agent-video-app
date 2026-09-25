@@ -33,7 +33,7 @@ test.describe('project export/import (Task 9 DoD)', () => {
     const sourceContext = await browser.newContext();
     const sourcePage = await sourceContext.newPage();
     await sourcePage.goto('/');
-    await sourcePage.locator('button', { hasText: 'Library' }).click();
+    await sourcePage.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await sourcePage.setInputFiles('#video-file', FIXTURE_PATH);
     await expect(sourcePage.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
     await expect.poll(() => duration(sourcePage), { timeout: 15_000 }).toBeGreaterThan(7);
@@ -58,7 +58,7 @@ test.describe('project export/import (Task 9 DoD)', () => {
     const freshContext = await browser.newContext();
     const freshPage = await freshContext.newPage();
     await freshPage.goto('/');
-    await freshPage.locator('button', { hasText: 'Library' }).click();
+    await freshPage.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await freshPage.setInputFiles('#project-file', zipPath);
     await expect(freshPage.getByText(/Imported 1 note\(s\), 1 chapter\(s\), 1 box\(es\), 1 clip\(s\), 1 frame\(s\)\./)).toBeVisible();
 

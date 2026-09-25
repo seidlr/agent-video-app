@@ -21,7 +21,7 @@ async function duration(page: Page): Promise<number> {
 
 async function loadFixtureAndWaitReady(page: Page): Promise<void> {
   await page.goto('/');
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
   await page.setInputFiles('#video-file', FIXTURE_PATH);
   await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
   await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);
@@ -50,7 +50,7 @@ test.describe('export_video/export_gif (Task 9 DoD, TS-007 steps 2-3)', () => {
     // Re-importing the exported file reports the same duration back.
     const exportPath = test.info().outputPath('exported.mp4');
     await download.saveAs(exportPath);
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.setInputFiles('#video-file', exportPath);
     await expect(page.locator('header b')).toHaveText('exported.mp4', { timeout: 15_000 });
     await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(2.5);

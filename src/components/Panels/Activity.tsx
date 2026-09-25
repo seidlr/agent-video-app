@@ -17,7 +17,7 @@ export function Activity(): ReactElement {
   const mostRecentFirst = [...activity].reverse();
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       {mostRecentFirst.map((call) => (
         <ToolCallCard key={call.id} call={call} />
       ))}

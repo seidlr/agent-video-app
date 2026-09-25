@@ -65,10 +65,10 @@ async function waitForStableCurrentTime(page: Page, timeoutMs = 5000): Promise<n
   return last;
 }
 
-/** The right-rail panel defaults to Activity (Task 4's placeholder); the sample list and drop
- * zone only render once the Library tab is selected. */
+/** The rail opens on Library by default; tests still select it explicitly so they don't depend
+ * on that default or on a panel an earlier step switched to. */
 async function openLibraryTab(page: Page): Promise<void> {
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
 }
 
 /** Matches both the initial big center button (PlayOverlay, aria-label "Play video") and, after

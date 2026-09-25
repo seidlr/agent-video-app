@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeToolCall } from '../../src/agent/activity';
+import { toolCallStatusText } from '../../src/agent/activity';
 import type { ToolCall } from '../../src/lib/types';
 
 function call(overrides: Partial<ToolCall> = {}): ToolCall {
@@ -14,16 +14,20 @@ function call(overrides: Partial<ToolCall> = {}): ToolCall {
   };
 }
 
-describe('describeToolCall', () => {
+describe('toolCallStatusText', () => {
   it('describes a running call with no duration yet', () => {
-    expect(describeToolCall(call({ status: 'running' }))).toBe('seek · running…');
+    expect(toolCallStatusText(call({ status: 'running' }))).toBe('running…');
   });
 
-  it('describes a done call with its duration', () => {
-    expect(describeToolCall(call({ status: 'done', endedAt: 1120 }))).toBe('seek · done (120ms)');
+  it('describes a done call with its duration in ms under a second', () => {
+    expect(toolCallStatusText(call({ status: 'done', endedAt: 1120 }))).toBe('done · 120ms');
+  });
+
+  it('switches to seconds from one second up', () => {
+    expect(toolCallStatusText(call({ status: 'done', endedAt: 21_003 }))).toBe('done · 20.0s');
   });
 
   it('describes a failed call', () => {
-    expect(describeToolCall(call({ status: 'error', endedAt: 1050, error: 'boom' }))).toBe('seek · failed (50ms)');
+    expect(toolCallStatusText(call({ status: 'error', endedAt: 1050, error: 'boom' }))).toBe('failed · 50ms');
   });
 });

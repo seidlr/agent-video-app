@@ -105,7 +105,7 @@ test.describe('TS-008: skill discovery and install surfaces @build', () => {
 
   test('step 4: the Skill panel shows the install command, a download link, and per-agent connection cards', async ({ page }) => {
     await page.goto(APP_URL);
-    await page.locator('button', { hasText: 'Skill' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Skill', exact: true }).click();
 
     await expect(page.locator('code', { hasText: 'npx skills add' })).toHaveCount(2);
     await expect(page.locator('a', { hasText: 'Download zip' })).toHaveAttribute('href', `${BASE_PATH}skill.zip`);

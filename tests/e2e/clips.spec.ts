@@ -23,7 +23,7 @@ test.describe('clips (Task 9 DoD, TS-007 step 1)', () => {
   test('add_clip creates clips that appear as timeline ranges and panel rows; remove_clip and reorder_clips work', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.setInputFiles('#video-file', FIXTURE_PATH);
     await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
     await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);
@@ -45,7 +45,7 @@ test.describe('clips (Task 9 DoD, TS-007 step 1)', () => {
     await expect(page.getByRole('button', { name: 'Seek to clip 2' })).toBeVisible();
 
     // Clips panel lists both, with durations.
-    await page.locator('button', { hasText: 'Clips' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Clips', exact: true }).click();
     await expect(page.getByText('2.0s')).toBeVisible();
     await expect(page.getByText('1.0s')).toBeVisible();
 

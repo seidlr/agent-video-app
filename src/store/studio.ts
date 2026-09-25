@@ -327,7 +327,7 @@ export function createStudioStore() {
     transcript: { segments: [], lang: null },
     clips: [],
     activity: [],
-    ui: { theme: 'system', panel: 'activity', layout: 'studio', agentTransport: 'none', agentInstanceActive: true },
+    ui: { theme: 'system', panel: 'library', layout: 'studio', agentTransport: 'none', agentInstanceActive: true },
     capabilities: detectCapabilities(),
     storage: { persisted: false, usage: 0, quota: 0, worksInThisContext: true },
     models: {},

@@ -14,7 +14,7 @@ async function execTool(page: Page, name: string, args: Record<string, unknown> 
 }
 
 async function openNotesTab(page: Page): Promise<void> {
-  await page.locator('button', { hasText: 'Notes' }).first().click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Notes', exact: true }).click();
 }
 
 /** Polls the exposed dev-only store (window.__studioStore, wired in src/main.tsx), same pattern
@@ -26,7 +26,7 @@ async function currentTime(page: Page): Promise<number> {
 test.describe('notes, chapters, and exports (Task 6 DoD, TS-004)', () => {
   test('add_note/add_chapter show up as timeline markers and panel rows; export_notes renders every format', async ({ page }) => {
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.locator('button', { hasText: 'Sprite Fight' }).click();
     await expect(page.locator('header b')).toHaveText('Sprite Fight');
 
@@ -111,28 +111,28 @@ async function addVisionResult(page: Page, input: { time: number; kind: string; 
 test.describe('Vision panel: promoting a VLM result to a note or chapter (Task 12 DoD)', () => {
   test('"Add as note" and "Add as chapter title" create a real note and chapter from a vision result', async ({ page }) => {
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.locator('button', { hasText: 'Sprite Fight' }).click();
     await expect(page.locator('header b')).toHaveText('Sprite Fight');
 
     await addVisionResult(page, { time: 1.5, kind: 'describe', text: 'A red scene with a moving white square', model: 'vlm-default' });
 
-    await page.locator('button', { hasText: 'Vision' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Vision', exact: true }).click();
     await expect(page.getByText('A red scene with a moving white square')).toBeVisible();
     await expect(page.getByText('Frame description', { exact: false })).toBeVisible();
 
     await page.locator('button', { hasText: 'Add as note' }).click();
     await expect(page.getByText('Added!').first()).toBeVisible();
 
-    await page.locator('button', { hasText: 'Notes' }).first().click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Notes', exact: true }).click();
     await expect(page.getByText('A red scene with a moving white square')).toBeVisible();
     await expect(page.getByRole('button', { name: /00:01\.500.*A red scene/ })).toBeVisible();
 
-    await page.locator('button', { hasText: 'Vision' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Vision', exact: true }).click();
     await page.locator('button', { hasText: 'Add as chapter title' }).click();
     await expect(page.getByText('Added!').first()).toBeVisible();
 
-    await page.locator('button', { hasText: 'Notes' }).first().click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Notes', exact: true }).click();
     await page.locator('button', { hasText: 'Chapters' }).last().click();
     await expect(page.getByRole('button', { name: /00:01\.500.*A red scene with a moving white square/ })).toBeVisible();
   });

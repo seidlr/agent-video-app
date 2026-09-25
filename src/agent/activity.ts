@@ -12,9 +12,12 @@ export function createActivityDeps(store: StudioStore): RegistryDeps {
   };
 }
 
-/** One-line human summary for the ToolCallCard header, e.g. "seek · done (120ms)". */
-export function describeToolCall(call: ToolCall): string {
-  const statusWord = call.status === 'running' ? 'running…' : call.status === 'error' ? 'failed' : 'done';
-  const duration = call.endedAt !== undefined ? ` (${call.endedAt - call.startedAt}ms)` : '';
-  return `${call.name} · ${statusWord}${duration}`;
+/** A tool call's status and duration for the Activity card and the top bar's agent-presence
+ * chip, e.g. "done · 120ms", "failed · 1.2s", "running…". */
+export function toolCallStatusText(call: ToolCall): string {
+  if (call.status === 'running') return 'running…';
+  const word = call.status === 'error' ? 'failed' : 'done';
+  if (call.endedAt === undefined) return word;
+  const ms = call.endedAt - call.startedAt;
+  return `${word} · ${ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`}`;
 }

@@ -2,8 +2,8 @@ import { Bot, Captions, Crop, Eye, FileDown, Scissors, Search, Wand2 } from 'luc
 import type { ReactElement } from 'react';
 
 const STEPS = [
-  { title: 'Load a video', body: 'Drop a file, pick a sample, or hand your agent a YouTube link — all in the Library tab.' },
-  { title: 'Point an agent at this page', body: 'Claude Desktop, ChatGPT, Codex CLI, or any WebMCP-aware host. See the Skill tab for the exact steps for yours.' },
+  { title: 'Load a video', body: 'Drop a file, pick a sample, or hand your agent a YouTube link — all in the Library panel.' },
+  { title: 'Point an agent at this page', body: 'Claude Desktop, ChatGPT, Codex CLI, or any WebMCP-aware host. See the Skill panel for the exact steps for yours.' },
   { title: 'Step back', body: 'Everything below happens through tool calls your agent makes -- this page is the UI, not the driver.' },
 ];
 

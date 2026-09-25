@@ -8,7 +8,7 @@ test('the app renders with the design tokens applied and no console errors', asy
   page.on('pageerror', (err) => consoleErrors.push(err.message));
 
   await page.goto('/');
-  await expect(page.getByText('Agent', { exact: true })).toBeVisible();
+  await expect(page.locator('header').getByText('Agent', { exact: true })).toBeVisible();
 
   const bodyBg = await page.evaluate(() => {
     const styles = getComputedStyle(document.body);

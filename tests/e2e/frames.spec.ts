@@ -21,11 +21,11 @@ async function execTool(page: Page, name: string, args: Record<string, unknown> 
 }
 
 async function openLibraryTab(page: Page): Promise<void> {
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
 }
 
 async function openFramesTab(page: Page): Promise<void> {
-  await page.locator('button', { hasText: 'Frames' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Frames', exact: true }).click();
 }
 
 async function duration(page: Page): Promise<number> {

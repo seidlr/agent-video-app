@@ -89,7 +89,7 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     // verification calls to it are incidental, so assert the six actions are present rather than
     // an exact card count that would double as an assertion on how many times *this test*
     // happened to call get_state.
-    await page.locator('button', { hasText: 'Activity' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Activity', exact: true }).click();
     const cardTexts = await page.locator('[data-testid="tool-call-card"]').allTextContents();
     for (const action of ['list_library', 'load_video', 'seek', 'play', 'pause', 'set_playback']) {
       expect(cardTexts.some((text) => text.includes(action) && text.includes('done'))).toBe(true);
@@ -102,17 +102,17 @@ test.describe('agent tools (Task 4 DoD, TS-001)', () => {
     await page.goto('/');
     await execTool(page, 'load_video', { source: 'sample', id: 'sprite-fight' });
 
-    // Studio layout (the default): the tab rail/side panel renders as its own landmark.
+    // Studio layout (the default): the panel rail renders as its own landmark.
     await expect(page.getByRole('complementary')).toBeVisible();
 
     const focused = await execTool(page, 'set_view', { layout: 'focus' });
-    expect(focused).toMatchObject({ ok: true, summary: 'View: panel=activity, layout=focus' });
+    expect(focused).toMatchObject({ ok: true, summary: 'View: panel=library, layout=focus' });
     await expect(page.getByRole('complementary')).not.toBeVisible();
     // The video stage itself is unaffected -- still there, just now with the full width to itself.
     await expect(page.locator('[data-media-player]')).toBeVisible();
 
     const studio = await execTool(page, 'set_view', { layout: 'studio' });
-    expect(studio).toMatchObject({ ok: true, summary: 'View: panel=activity, layout=studio' });
+    expect(studio).toMatchObject({ ok: true, summary: 'View: panel=library, layout=studio' });
     await expect(page.getByRole('complementary')).toBeVisible();
   });
 

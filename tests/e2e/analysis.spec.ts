@@ -25,7 +25,7 @@ async function duration(page: Page): Promise<number> {
  * tests/e2e/segment.spec.ts's loadFixtureAndWaitReady. */
 async function loadFixtureAndWaitReady(page: Page): Promise<void> {
   await page.goto('/');
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
   await page.setInputFiles('#video-file', FIXTURE_PATH);
   await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
   await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);
@@ -36,7 +36,7 @@ async function loadFixtureAndWaitReady(page: Page): Promise<void> {
  * color `cuts.mp4` fixture doesn't have. */
 async function loadSpriteFightAndWaitReady(page: Page): Promise<void> {
   await page.goto('/');
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
   await page.locator('button', { hasText: 'Sprite Fight' }).click();
   await expect(page.locator('header b')).toHaveText('Sprite Fight');
   await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(0);
@@ -122,7 +122,7 @@ test.describe('transcript tools: transcribe/get_transcript/search_transcript @ml
 
     // TS-006 step 3 (DoD): "Transcript panel fills" -- switch to it and check a real segment row
     // (not just the tool's own JSON return) shows the recognized text.
-    await page.locator('button', { hasText: 'Transcript' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Transcript', exact: true }).click();
     await expect(page.getByText(/fox/i).first()).toBeVisible();
   });
 
@@ -263,7 +263,7 @@ test.describe('vision tools: search_frames/find_similar_frames method:dino @ml',
     // TS-006 step 8 (DoD): "the Vision panel lists the hits with thumbnails" -- thumbnails are
     // out of scope here (search_frames never populates the plan's own optional `thumbFrameId`;
     // see the Deviations entry), but the ranked hit list itself must render with the query.
-    await page.locator('button', { hasText: 'Vision' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Vision', exact: true }).click();
     await expect(page.getByText('"yellow"')).toBeVisible();
     await expect(page.locator('button', { hasText: '%' }).first()).toBeVisible();
   });

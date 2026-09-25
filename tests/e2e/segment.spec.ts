@@ -26,7 +26,7 @@ async function duration(page: Page): Promise<number> {
  * `<video>` element to have metadata, same as tests/e2e/frames.spec.ts's loadFixtureAndWaitReady. */
 async function loadFixtureAndWaitReady(page: Page, query = ''): Promise<void> {
   await page.goto(`/${query}`);
-  await page.locator('button', { hasText: 'Library' }).click();
+  await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
   await page.setInputFiles('#video-file', FIXTURE_PATH);
   await expect(page.locator('header b')).toHaveText('cuts.mp4', { timeout: 15_000 });
   await expect.poll(() => duration(page), { timeout: 15_000 }).toBeGreaterThan(7);

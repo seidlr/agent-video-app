@@ -27,7 +27,7 @@ async function timelineGeometry(page: Page): Promise<{ fillFraction: number; thu
 test.describe('timeline reflects seeks', () => {
   test('a seek moves the timeline fill and playhead to the matching position', async ({ page }) => {
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.setInputFiles('#video-file', FIXTURE_PATH);
     await expect.poll(() => page.evaluate(() => (window as unknown as StudioWindow).__studioStore.getState().player.duration), { timeout: 20_000 }).toBeGreaterThan(0);
 
@@ -39,29 +39,32 @@ test.describe('timeline reflects seeks', () => {
     expect((await timelineGeometry(page)).thumbCenterFraction).toBeCloseTo(4 / FIXTURE_DURATION, 1);
   });
 
-  test('with chapters, segments are sized by duration and each fills by its own progress', async ({ page }) => {
+  test('with chapters, the chapter lane sizes blocks by duration, highlights the current one, and the scrub fill stays continuous', async ({ page }) => {
     await page.goto('/');
-    await page.locator('button', { hasText: 'Library' }).click();
+    await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: 'Library', exact: true }).click();
     await page.setInputFiles('#video-file', FIXTURE_PATH);
     await expect.poll(() => page.evaluate(() => (window as unknown as StudioWindow).__studioStore.getState().player.duration), { timeout: 20_000 }).toBeGreaterThan(0);
 
     const call = (name: string, args: object): Promise<unknown> =>
       page.evaluate(([n, a]) => (navigator as unknown as { modelContextTesting: { executeTool(n: string, a: string): Promise<unknown> } }).modelContextTesting.executeTool(n as string, JSON.stringify(a)), [name, args]);
+    // Added one at a time, the way an agent builds chapters -- vidstack's own segmented chapter
+    // bar kept stale fills across exactly this sequence, which is why the scrub track stays plain.
     await call('add_chapter', { start: 0, end: 3, title: 'Intro' });
-    await call('add_chapter', { start: 3, end: 8, title: 'Rest' });
-    await call('seek', { time: 5 });
+    await call('add_chapter', { start: 3, end: 5, title: 'Middle' });
+    await call('add_chapter', { start: 5, end: 8, title: 'Rest' });
+    await call('seek', { time: 4 });
 
-    // Chapter 1 (0-3s of 8s) is fully passed; chapter 2 (3-8s) is 2 of its 5 seconds in.
-    await expect
-      .poll(
-        () =>
-          page.evaluate(() => {
-            const tracks = [...document.querySelectorAll('[data-testid="timeline-chapter-track"]')].map((el) => el.getBoundingClientRect().width);
-            const fills = [...document.querySelectorAll('[data-testid="timeline-chapter-fill"]')].map((el) => el.getBoundingClientRect().width);
-            return { widthRatio: tracks[0]! / tracks[1]!, firstFill: fills[0]! / tracks[0]!, secondFill: fills[1]! / tracks[1]! };
-          }),
-        { timeout: 10_000 },
-      )
-      .toMatchObject({ widthRatio: expect.closeTo(3 / 5, 1), firstFill: expect.closeTo(1, 1), secondFill: expect.closeTo(2 / 5, 1) });
+    const intro = page.getByRole('button', { name: 'Seek to chapter Intro' });
+    const middle = page.getByRole('button', { name: 'Seek to chapter Middle' });
+    await expect(middle).toHaveClass(/bg-clay-soft/, { timeout: 10_000 });
+    await expect(intro).not.toHaveClass(/bg-clay-soft/);
+
+    const widths = await page.evaluate(() =>
+      ['Intro', 'Middle', 'Rest'].map((t) => document.querySelector(`[aria-label="Seek to chapter ${t}"]`)!.getBoundingClientRect().width),
+    );
+    expect(widths[0]! / widths[2]!).toBeCloseTo(1, 1);
+    expect(widths[1]! / widths[2]!).toBeCloseTo(2 / 3, 1);
+
+    await expect.poll(async () => (await timelineGeometry(page)).fillFraction, { timeout: 10_000 }).toBeCloseTo(4 / FIXTURE_DURATION, 1);
   });
 });
