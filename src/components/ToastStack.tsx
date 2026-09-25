@@ -4,6 +4,9 @@ import type { ToolCall } from '../lib/types';
 import { useStudio } from '../store/studio';
 
 const DISMISS_AFTER_MS = 4000;
+/** An agent often fires several calls in a row; the full history belongs to the Activity tab, and
+ * a taller stack would cover the video. Older toasts drop off as newer ones arrive. */
+const MAX_VISIBLE = 3;
 
 const DOT_COLOR: Record<ToolCall['status'], string> = {
   running: 'bg-warn',
@@ -21,14 +24,19 @@ export function ToastStack(): ReactElement | null {
   const activity = useStudio((s) => s.activity);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  // Every call ever shown, so a dismissed toast is never re-added when `activity` next changes
+  // (the timer map alone can't tell "not shown yet" from "already dismissed" once its entry is gone).
+  const shown = useRef(new Set<string>());
 
   useEffect(() => {
     for (const call of activity) {
-      setVisibleIds((ids) => (ids.includes(call.id) ? ids : [...ids, call.id]));
+      if (!shown.current.has(call.id)) {
+        shown.current.add(call.id);
+        setVisibleIds((ids) => [...ids, call.id].slice(-MAX_VISIBLE));
+      }
       if (call.status !== 'running' && !timers.current.has(call.id)) {
         const timer = setTimeout(() => {
           setVisibleIds((ids) => ids.filter((id) => id !== call.id));
-          timers.current.delete(call.id);
         }, DISMISS_AFTER_MS);
         timers.current.set(call.id, timer);
       }
