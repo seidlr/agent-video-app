@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { runDetectObjects, runDetectScenes } from '../../agent/tools/vision';
-import { getMlQueryOverrides, mlClient } from '../../ml/client';
+import { getMlQueryOverrides } from '../../ml/client';
 import { pickDetectModel } from '../../ml/catalog';
 import { secsToTimecode } from '../../lib/time';
 import { studioStore, useStudio, type VisionResult } from '../../store/studio';
+import { ensureModelForUi, UI_FEEDBACK_MS } from '../ui/ensureModel';
 import { SizeConfirm } from '../ui/SizeConfirm';
 
 const KIND_LABELS: Record<VisionResult['kind'], string> = {
@@ -53,9 +54,11 @@ export function Vision(): ReactElement {
     try {
       const result = await runDetectScenes(studioStore, { addChapters: true });
       setScenesFeedback(result.ok ? result.summary : result.error);
+    } catch (error) {
+      setScenesFeedback(`Scene detection failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setScenesBusy(false);
-      setTimeout(() => setScenesFeedback(null), 3000);
+      setTimeout(() => setScenesFeedback(null), UI_FEEDBACK_MS);
     }
   }
 
@@ -74,18 +77,25 @@ export function Vision(): ReactElement {
     setObjectsBusy(true);
     setObjectsFeedback(null);
     try {
-      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      const probe = await ensureModelForUi(modelId, { confirmDownload });
       if (!probe.ok) {
-        if (probe.error === 'model_not_loaded') setDetectConfirm({ sizeMB: probe.sizeMB, modelId });
+        if (probe.needsConfirm) {
+          setDetectConfirm({ sizeMB: probe.sizeMB, modelId });
+        } else {
+          setDetectConfirm(null);
+          setObjectsFeedback(probe.message);
+        }
         return;
       }
       setDetectConfirm(null);
 
       const result = await runDetectObjects(studioStore, { labels: zeroShot ? labels : undefined, addBoxes: true, confirmDownload: true });
       setObjectsFeedback(result.ok ? result.summary : result.error);
+    } catch (error) {
+      setObjectsFeedback(`Detect failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setObjectsBusy(false);
-      setTimeout(() => setObjectsFeedback(null), 3000);
+      setTimeout(() => setObjectsFeedback(null), UI_FEEDBACK_MS);
     }
   }
 

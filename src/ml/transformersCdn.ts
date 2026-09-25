@@ -38,3 +38,29 @@ export function loadTransformers(): Promise<TransformersModule> {
   })();
   return modulePromise;
 }
+
+export interface DownloadProgressEvent {
+  status: string;
+  loaded?: number;
+  total?: number;
+}
+
+/**
+ * Builds the `progress_callback` every model worker hands to transformers.js, reporting a single
+ * 0-1 fraction of the whole download. transformers.js emits a per-file `progress` event (each file
+ * counts 0-100% on its own, so a multi-file model's readout jumped 100% -> 26% -> 69% -> 34%...) and,
+ * since v4, an aggregate `progress_total` event (bytes loaded/total across every file it will fetch,
+ * emitted just before the per-file event it aggregates). Prefer the aggregate; only if a build never
+ * emits one fall back to the per-file numbers.
+ */
+export function downloadProgressCallback(onProgress: (fraction: number) => void): (event: DownloadProgressEvent) => void {
+  let sawAggregate = false;
+  return (event) => {
+    if (event.status === 'progress_total') {
+      sawAggregate = true;
+      if (event.total) onProgress((event.loaded ?? 0) / event.total);
+    } else if (!sawAggregate && event.status === 'progress' && event.total) {
+      onProgress((event.loaded ?? 0) / event.total);
+    }
+  };
+}

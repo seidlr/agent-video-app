@@ -12,7 +12,7 @@
  */
 import type { AudioClassificationPipeline, PreTrainedModel, Processor } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 /** `PyAnnoteProcessor`'s own `post_process_speaker_diarization` isn't part of the package's public
  * type-level export surface to import and cast to directly (same situation as segment.worker.ts's
@@ -33,9 +33,7 @@ async function loadModel(modelId: string, device: ModelDevice, onProgress: (frac
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { AutoModelForAudioFrameClassification, AutoProcessor, pipeline } = await loadTransformers();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   if (modelId === 'pyannote-segmentation') {
     diarizationModel = await AutoModelForAudioFrameClassification.from_pretrained(entry.repo, {

@@ -8,6 +8,7 @@
  */
 import { getCatalogEntry } from './catalog';
 import { loadKokoro } from './kokoroCdn';
+import { downloadProgressCallback } from './transformersCdn';
 
 type KokoroDevice = 'wasm' | 'webgpu' | 'cpu';
 type KokoroDtype = 'fp32' | 'fp16' | 'q8' | 'q4' | 'q4f16';
@@ -19,9 +20,7 @@ async function loadModel(modelId: string, device: KokoroDevice, onProgress: (fra
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { KokoroTTS } = await loadKokoro();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   kokoro = await KokoroTTS.from_pretrained(entry.repo, {
     dtype: entry.dtype as KokoroDtype,

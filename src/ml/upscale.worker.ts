@@ -10,7 +10,7 @@
  */
 import type { ImageToImagePipeline } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 let upscaler: ImageToImagePipeline | null = null;
 
@@ -19,9 +19,7 @@ async function loadModel(modelId: string, device: ModelDevice, onProgress: (frac
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { pipeline } = await loadTransformers();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   upscaler = await pipeline('image-to-image', entry.repo, {
     device,

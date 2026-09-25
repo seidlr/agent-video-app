@@ -2,10 +2,10 @@ import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Trash2 } from 'lucide-react';
 import { runGenerateVoiceover, runRemoveBackground } from '../../agent/tools/effects';
-import { mlClient } from '../../ml/client';
 import { secsToTimecode } from '../../lib/time';
 import type { MatteReplace } from '../../lib/types';
 import { studioStore, useStudio } from '../../store/studio';
+import { ensureModelForUi, UI_FEEDBACK_MS } from '../ui/ensureModel';
 import { SizeConfirm } from '../ui/SizeConfirm';
 
 const REPLACE_LABELS: Record<'transparent' | 'color' | 'blur', string> = {
@@ -64,9 +64,14 @@ export function Effects(): ReactElement {
     setMatteBusy(true);
     setMatteFeedback(null);
     try {
-      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      const probe = await ensureModelForUi(modelId, { confirmDownload });
       if (!probe.ok) {
-        if (probe.error === 'model_not_loaded') setMatteConfirm({ sizeMB: probe.sizeMB, modelId });
+        if (probe.needsConfirm) {
+          setMatteConfirm({ sizeMB: probe.sizeMB, modelId });
+        } else {
+          setMatteConfirm(null);
+          setMatteFeedback(probe.message);
+        }
         return;
       }
       setMatteConfirm(null);
@@ -77,9 +82,11 @@ export function Effects(): ReactElement {
         { progress: () => undefined },
       );
       setMatteFeedback(result.ok ? result.summary : result.error);
+    } catch (error) {
+      setMatteFeedback(`Remove background failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setMatteBusy(false);
-      setTimeout(() => setMatteFeedback(null), 3000);
+      setTimeout(() => setMatteFeedback(null), UI_FEEDBACK_MS);
     }
   }
 
@@ -90,9 +97,14 @@ export function Effects(): ReactElement {
     setVoBusy(true);
     setVoFeedback(null);
     try {
-      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      const probe = await ensureModelForUi(modelId, { confirmDownload });
       if (!probe.ok) {
-        if (probe.error === 'model_not_loaded') setVoConfirm({ sizeMB: probe.sizeMB, modelId });
+        if (probe.needsConfirm) {
+          setVoConfirm({ sizeMB: probe.sizeMB, modelId });
+        } else {
+          setVoConfirm(null);
+          setVoFeedback(probe.message);
+        }
         return;
       }
       setVoConfirm(null);
@@ -103,9 +115,11 @@ export function Effects(): ReactElement {
         setVoText('');
         setVoAt('');
       }
+    } catch (error) {
+      setVoFeedback(`Voice-over failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setVoBusy(false);
-      setTimeout(() => setVoFeedback(null), 3000);
+      setTimeout(() => setVoFeedback(null), UI_FEEDBACK_MS);
     }
   }
 

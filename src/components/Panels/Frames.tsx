@@ -3,13 +3,13 @@ import type { ReactElement } from 'react';
 import { Trash2 } from 'lucide-react';
 import { runUpscaleFrame } from '../../agent/tools/effects';
 import { resolveVlmId } from '../../ml/catalog';
-import { mlClient } from '../../ml/client';
 import { buildDescribeFrameMessages } from '../../ml/vlmPrompts';
 import { secsToTimecode } from '../../lib/time';
 import type { BoxSource } from '../../lib/types';
 import { deletePersistedFrame } from '../../store/frames';
 import { persistBox } from '../../store/boxes';
 import { studioStore, useStudio, type FrameEntry } from '../../store/studio';
+import { ensureModelForUi, UI_FEEDBACK_MS } from '../ui/ensureModel';
 import { SizeConfirm } from '../ui/SizeConfirm';
 
 const VLM_MODEL_ID = resolveVlmId('default');
@@ -44,7 +44,6 @@ export function Frames(): ReactElement {
   const frames = useStudio((s) => s.frames);
   const removeFrame = useStudio((s) => s.removeFrame);
   const seek = useStudio((s) => s.seek);
-  const setModelState = useStudio((s) => s.setModelState);
   const addVisionResult = useStudio((s) => s.addVisionResult);
   const addBox = useStudio((s) => s.addBox);
 
@@ -59,19 +58,23 @@ export function Frames(): ReactElement {
 
   function showFeedback(frameId: string, action: Action, text: string): void {
     setFeedback({ frameId, action, text });
-    setTimeout(() => setFeedback((f) => (f?.frameId === frameId && f.action === action ? null : f)), 2500);
+    setTimeout(() => setFeedback((f) => (f?.frameId === frameId && f.action === action ? null : f)), UI_FEEDBACK_MS);
   }
 
   async function runDescribe(frame: FrameEntry, confirmDownload: boolean): Promise<void> {
     const busyKey = `${frame.id}:describe`;
     setBusy(busyKey);
     try {
-      const ensured = await mlClient.ensureModel(VLM_MODEL_ID, { confirmDownload, onProgress: (fraction) => setModelState(VLM_MODEL_ID, { progress: fraction }) });
+      const ensured = await ensureModelForUi(VLM_MODEL_ID, { confirmDownload });
       if (!ensured.ok) {
-        if (ensured.error === 'model_not_loaded') setConfirming({ frameId: frame.id, action: 'describe', sizeMB: ensured.sizeMB });
+        if (ensured.needsConfirm) {
+          setConfirming({ frameId: frame.id, action: 'describe', sizeMB: ensured.sizeMB });
+        } else {
+          setConfirming(null);
+          showFeedback(frame.id, 'describe', ensured.message);
+        }
         return;
       }
-      setModelState(VLM_MODEL_ID, { loaded: true, cached: true, progress: 1 });
       setConfirming(null);
 
       const bitmap = await bitmapFromBlobUrl(frame.blobUrl);
@@ -87,6 +90,8 @@ export function Frames(): ReactElement {
 
       addVisionResult({ time: frame.time, kind: 'describe', text: result.text, model: VLM_MODEL_ID });
       showFeedback(frame.id, 'describe', 'Described -- see Vision panel');
+    } catch (error) {
+      showFeedback(frame.id, 'describe', `Describe failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setBusy(null);
     }
@@ -96,12 +101,16 @@ export function Frames(): ReactElement {
     const busyKey = `${frame.id}:read_text`;
     setBusy(busyKey);
     try {
-      const ensured = await mlClient.ensureModel(FLORENCE_MODEL_ID, { confirmDownload, onProgress: (fraction) => setModelState(FLORENCE_MODEL_ID, { progress: fraction }) });
+      const ensured = await ensureModelForUi(FLORENCE_MODEL_ID, { confirmDownload });
       if (!ensured.ok) {
-        if (ensured.error === 'model_not_loaded') setConfirming({ frameId: frame.id, action: 'read_text', sizeMB: ensured.sizeMB });
+        if (ensured.needsConfirm) {
+          setConfirming({ frameId: frame.id, action: 'read_text', sizeMB: ensured.sizeMB });
+        } else {
+          setConfirming(null);
+          showFeedback(frame.id, 'read_text', ensured.message);
+        }
         return;
       }
-      setModelState(FLORENCE_MODEL_ID, { loaded: true, cached: true, progress: 1 });
       setConfirming(null);
 
       const bitmap = await bitmapFromBlobUrl(frame.blobUrl);
@@ -120,6 +129,8 @@ export function Frames(): ReactElement {
         }),
       );
       showFeedback(frame.id, 'read_text', `${result.boxes.length} text region(s) found`);
+    } catch (error) {
+      showFeedback(frame.id, 'read_text', `Read text failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setBusy(null);
     }
@@ -134,15 +145,22 @@ export function Frames(): ReactElement {
     const busyKey = `${frame.id}:upscale`;
     setBusy(busyKey);
     try {
-      const probe = await mlClient.ensureModel(UPSCALE_MODEL_ID, { confirmDownload, onProgress: (fraction) => setModelState(UPSCALE_MODEL_ID, { progress: fraction }) });
+      const probe = await ensureModelForUi(UPSCALE_MODEL_ID, { confirmDownload });
       if (!probe.ok) {
-        if (probe.error === 'model_not_loaded') setConfirming({ frameId: frame.id, action: 'upscale', sizeMB: probe.sizeMB });
+        if (probe.needsConfirm) {
+          setConfirming({ frameId: frame.id, action: 'upscale', sizeMB: probe.sizeMB });
+        } else {
+          setConfirming(null);
+          showFeedback(frame.id, 'upscale', probe.message);
+        }
         return;
       }
       setConfirming(null);
 
       const result = await runUpscaleFrame(studioStore, { frameId: frame.id, confirmDownload: true });
       showFeedback(frame.id, 'upscale', result.ok ? `Upscaled to ${result.width}x${result.height} -- see Frames panel` : result.error);
+    } catch (error) {
+      showFeedback(frame.id, 'upscale', `Upscale failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setBusy(null);
     }

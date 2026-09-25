@@ -33,7 +33,7 @@
  */
 import type { Florence2ForConditionalGeneration as Florence2ModelType, PreTrainedModel, Processor, Tensor } from '@huggingface/transformers';
 import { getCatalogEntry } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 /** `post_process_generation`'s own return type isn't part of the package's public type-level
  * export surface (same situation as segment.worker.ts's `MaskProcessor`) -- narrows the one method
@@ -54,9 +54,7 @@ async function loadModel(modelId: string, onProgress: (fraction: number) => void
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { AutoProcessor, Florence2ForConditionalGeneration } = await loadTransformers();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   model = await (Florence2ForConditionalGeneration as typeof Florence2ModelType).from_pretrained(entry.repo, {
     dtype: entry.dtype as Parameters<typeof Florence2ModelType.from_pretrained>[1] extends { dtype?: infer D } ? D : never,

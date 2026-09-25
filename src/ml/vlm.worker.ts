@@ -16,7 +16,7 @@
 import type { AutoModelForImageTextToText as AutoModelForImageTextToTextType, PreTrainedModel, Processor, RawImage as RawImageType } from '@huggingface/transformers';
 import type { ChatMessage } from './vlmPrompts';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 let model: PreTrainedModel | null = null;
 let processor: Processor | null = null;
@@ -29,9 +29,7 @@ async function loadModel(modelId: string, device: ModelDevice, onProgress: (frac
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { AutoModelForImageTextToText, AutoProcessor } = await loadTransformers();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   // vlm-fast is the only tier with a wasm fallback (Key Decisions: "wasm fallback only for
   // vlm-fast") -- the other two tiers are large enough that a wasm run would be impractically slow.

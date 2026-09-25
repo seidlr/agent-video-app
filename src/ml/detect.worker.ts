@@ -16,7 +16,7 @@
  */
 import type { ObjectDetectionOutput, ObjectDetectionPipeline, ZeroShotObjectDetectionOutput, ZeroShotObjectDetectionPipeline } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 let closedSetDetector: ObjectDetectionPipeline | null = null;
 let zeroShotDetector: ZeroShotObjectDetectionPipeline | null = null;
@@ -26,9 +26,7 @@ async function loadModel(modelId: string, device: ModelDevice, onProgress: (frac
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { pipeline } = await loadTransformers();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   if (entry.task === 'zero-shot-object-detection') {
     zeroShotDetector = await pipeline('zero-shot-object-detection', entry.repo, { device, dtype: entry.dtype as 'q4f16', progress_callback });

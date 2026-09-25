@@ -13,7 +13,7 @@
  */
 import type { AutomaticSpeechRecognitionOutput, AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 // Same rate media/audio.ts's own extractAudioPcm always extracts at (its own AUDIO_SAMPLE_RATE) --
 // duplicated as a literal rather than imported so this worker's tsconfig project doesn't pull in
@@ -31,9 +31,7 @@ async function loadModel(modelId: string, device: ModelDevice, onProgress: (frac
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { pipeline } = await loadTransformers();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   transcriber = await pipeline('automatic-speech-recognition', entry.repo, {
     device,

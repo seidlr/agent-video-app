@@ -14,7 +14,7 @@
  */
 import type { PreTrainedModel, Processor, Tensor } from '@huggingface/transformers';
 import { getCatalogEntry } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 /** `SamProcessor`/`Sam2Processor` (whichever `AutoProcessor.from_pretrained` resolves to for
  * these two models) both expose `post_process_masks`, but neither is part of the package's public
@@ -49,9 +49,7 @@ async function loadModel(modelId: string, onProgress: (fraction: number) => void
   const { AutoProcessor, EdgeTamModel, SamModel } = await loadTransformers();
 
   const ModelClass = entry.device === 'webgpu' ? EdgeTamModel : SamModel;
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   model = await ModelClass.from_pretrained(entry.repo, {
     dtype: entry.dtype as Parameters<typeof ModelClass.from_pretrained>[1] extends { dtype?: infer D } ? D : never,

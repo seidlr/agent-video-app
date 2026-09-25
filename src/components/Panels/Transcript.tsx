@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
 import { runTranscribe } from '../../agent/tools/transcript';
-import { mlClient } from '../../ml/client';
 import { resolveTranscribeId, type TranscribeTier } from '../../ml/catalog';
 import { secsToTimecode } from '../../lib/time';
 import type { TranscriptSegment } from '../../lib/types';
 import { getPersistedTranscript, listTranslatedLangs } from '../../store/transcript';
 import { studioStore, useStudio } from '../../store/studio';
+import { ensureModelForUi, UI_FEEDBACK_MS } from '../ui/ensureModel';
 import { SizeConfirm } from '../ui/SizeConfirm';
 
 /**
@@ -80,18 +80,25 @@ export function Transcript(): ReactElement {
     setTranscribing(true);
     setTranscribeFeedback(null);
     try {
-      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      const probe = await ensureModelForUi(modelId, { confirmDownload });
       if (!probe.ok) {
-        if (probe.error === 'model_not_loaded') setTranscribeConfirm({ sizeMB: probe.sizeMB, modelId });
+        if (probe.needsConfirm) {
+          setTranscribeConfirm({ sizeMB: probe.sizeMB, modelId });
+        } else {
+          setTranscribeConfirm(null);
+          setTranscribeFeedback(probe.message);
+        }
         return;
       }
       setTranscribeConfirm(null);
 
       const result = await runTranscribe(studioStore, { model, confirmDownload: true });
       setTranscribeFeedback(result.ok ? result.summary : result.error);
+    } catch (error) {
+      setTranscribeFeedback(`Transcription failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setTranscribing(false);
-      setTimeout(() => setTranscribeFeedback(null), 3000);
+      setTimeout(() => setTranscribeFeedback(null), UI_FEEDBACK_MS);
     }
   }
 

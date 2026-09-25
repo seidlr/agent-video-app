@@ -11,7 +11,7 @@
 import type { DepthEstimationPipeline, Tensor } from '@huggingface/transformers';
 import { computeDepthStats, type DepthStats } from '../media/depthStats';
 import { getCatalogEntry, type ModelDevice } from './catalog';
-import { loadTransformers } from './transformersCdn';
+import { downloadProgressCallback, loadTransformers } from './transformersCdn';
 
 let depthEstimator: DepthEstimationPipeline | null = null;
 
@@ -20,9 +20,7 @@ async function loadModel(modelId: string, device: ModelDevice, onProgress: (frac
   if (!entry) throw new Error(`unknown_model: ${modelId}`);
   const { pipeline } = await loadTransformers();
 
-  const progress_callback = (event: { status: string; loaded?: number; total?: number }): void => {
-    if (event.status === 'progress' && event.total) onProgress((event.loaded ?? 0) / event.total);
-  };
+  const progress_callback = downloadProgressCallback(onProgress);
 
   depthEstimator = await pipeline('depth-estimation', entry.repo, { device, dtype: entry.dtype as 'q4f16', progress_callback });
   onProgress(1);

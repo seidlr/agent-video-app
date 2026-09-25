@@ -2,8 +2,9 @@ import { useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, ReactElement } from 'react';
 import { runSegment } from '../../agent/tools/vision';
 import { pickSegmentModel } from '../../ml/catalog';
-import { getMlQueryOverrides, mlClient } from '../../ml/client';
+import { getMlQueryOverrides } from '../../ml/client';
 import { studioStore, useStudio } from '../../store/studio';
+import { ensureModelForUi, UI_FEEDBACK_MS } from '../ui/ensureModel';
 import { SizeConfirm } from '../ui/SizeConfirm';
 
 /**
@@ -39,9 +40,14 @@ export function SegmentClickLayer(): ReactElement {
     setBusy(true);
     setFeedback(null);
     try {
-      const probe = await mlClient.ensureModel(modelId, { confirmDownload });
+      const probe = await ensureModelForUi(modelId, { confirmDownload });
       if (!probe.ok) {
-        if (probe.error === 'model_not_loaded') setConfirm({ sizeMB: probe.sizeMB, modelId, x, y });
+        if (probe.needsConfirm) {
+          setConfirm({ sizeMB: probe.sizeMB, modelId, x, y });
+        } else {
+          setConfirm(null);
+          setFeedback(probe.message);
+        }
         return;
       }
       setConfirm(null);
@@ -49,9 +55,12 @@ export function SegmentClickLayer(): ReactElement {
       const result = await runSegment(studioStore, { points: [{ x, y, label: 1 }], confirmDownload: true });
       setFeedback(result.ok ? `${result.summary} -- see Tracking panel` : result.error);
       if (result.ok) setSegmentClickMode(false);
+    } catch (error) {
+      // runSegment runs the worker directly (no registry.call to convert a throw into a result).
+      setFeedback(`Segment failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setBusy(false);
-      setTimeout(() => setFeedback((f) => f && null), 3000);
+      setTimeout(() => setFeedback(null), UI_FEEDBACK_MS);
     }
   }
 
@@ -71,7 +80,7 @@ export function SegmentClickLayer(): ReactElement {
       className="absolute inset-0 z-20 cursor-crosshair"
       onClick={handleClick}
     >
-      {busy && <div className="absolute inset-x-0 top-2 mx-auto w-fit rounded bg-black/70 px-2 py-1 text-[11px] text-white">Segmenting…</div>}
+      {busy && !confirm && <div className="absolute inset-x-0 top-2 mx-auto w-fit rounded bg-black/70 px-2 py-1 text-[11px] text-white">Segmenting…</div>}
       {feedback && <div className="absolute inset-x-0 top-2 mx-auto w-fit rounded bg-black/70 px-2 py-1 text-[11px] text-white">{feedback}</div>}
       {confirm && (
         <div className="absolute inset-x-0 top-2 mx-auto w-fit" onClick={(e) => e.stopPropagation()}>

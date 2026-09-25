@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { MODEL_CATALOG } from '../../ml/catalog';
 import { mlClient } from '../../ml/client';
 import { useStudio } from '../../store/studio';
+import { ensureModelForUi } from '../ui/ensureModel';
 import { SizeConfirm } from '../ui/SizeConfirm';
 
 /** Every catalog model's cache/loaded state and load/unload controls, mirroring `list_models`/
@@ -13,6 +14,7 @@ export function Models(): ReactElement {
   const setModelState = useStudio((s) => s.setModelState);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [sizesMB, setSizesMB] = useState<Record<string, number>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void mlClient.listModels().then((rows) => {
@@ -24,13 +26,18 @@ export function Models(): ReactElement {
   }, [setModelState]);
 
   async function handleLoad(id: string, confirmDownload: boolean): Promise<void> {
-    const result = await mlClient.ensureModel(id, { confirmDownload, onProgress: (fraction) => setModelState(id, { progress: fraction }) });
+    setErrors((prev) => ({ ...prev, [id]: '' }));
+    const result = await ensureModelForUi(id, { confirmDownload });
     if (!result.ok) {
-      if (result.error === 'model_not_loaded') setConfirmingId(id);
+      if (result.needsConfirm) {
+        setConfirmingId(id);
+      } else {
+        setConfirmingId(null);
+        setErrors((prev) => ({ ...prev, [id]: result.message }));
+      }
       return;
     }
     setConfirmingId(null);
-    setModelState(id, { loaded: true, cached: true, progress: 1 });
   }
 
   function handleUnload(id: string): void {
@@ -62,6 +69,12 @@ export function Models(): ReactElement {
               <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface">
                 <div className="h-full bg-clay transition-[width]" style={{ width: `${state.progress * 100}%` }} />
               </div>
+            )}
+
+            {errors[entry.id] && (
+              <p role="alert" className="mt-1.5 text-[11.5px] text-clay-ink">
+                {errors[entry.id]}
+              </p>
             )}
 
             {confirmingId === entry.id ? (
