@@ -215,9 +215,15 @@ export function VideoStage(): ReactElement {
     >
       <div
         ref={containerRef}
+        data-testid="video-stage"
         className="relative aspect-video overflow-hidden rounded-token-lg bg-ink"
       >
-        <MediaProvider>
+        {/* The <video> must fill this container exactly: every overlay (BoxOverlay/MaskOverlay/
+            PoseOverlay/BoxDrawLayer) is positioned as a percentage of it, so a video left at its
+            intrinsic size (Tailwind's preflight only caps it at max-width) sits off from its own
+            boxes whenever it is smaller than the stage. object-contain letterboxes any other
+            aspect ratio inside the same rect. */}
+        <MediaProvider className="[&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:max-w-none [&_video]:object-contain">
           <Track key={chaptersVttUrl} src={chaptersVttUrl} kind="chapters" label="Chapters" language="en-US" default />
         </MediaProvider>
         <FrameLabel chapter={activeChapter} index={activeIndex} />
