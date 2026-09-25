@@ -75,19 +75,43 @@ Every write above returned `verification.verified: true` from the CLI's own rend
 
 ## Sync status (Task 14)
 
-Not attempted this session. The Task 6 checkpoint above remains the last real
-`open-claude-design sync review` comparison against the code; a full re-review across all five
-deliverable screens (`sync finish` per Task 14's own Definition of Done) was not run. The honest
-gap this leaves: the five mockups were drawn against Task 1's own scope, and the app has since
-grown substantially past it (Tasks 7-13 added segmentation/tracking, scene/search/transcript
-analysis, VLM/OCR vision tools, and the whole Effects panel/voice-over/upscale/translation
-surface) -- none of that later surface has a corresponding mockup to sync against at all, so a
-"finished" ledger for the original five screens would not actually mean the *current* app matches
-Claude Design. Closing this properly needs either updating the Claude Design project itself with
-mockups for the newer panels first, or an explicit decision that the original five screens are the
-permanent design-of-record and everything after Task 6 is implemented ad hoc against the same
-token/component vocabulary (which every later task's own Deviations entries describe doing, e.g.
-Effects.tsx/Vision.tsx following Notes.tsx's established patterns) without a matching mockup.
+Decision (user-confirmed): the five Task 1 screens stay the **design-of-record**; the panels added
+after Task 6 (Vision, Clips, Effects, the click-to-run controls, ...) have no mockup and are
+implemented against the same token/component vocabulary. Every screen has now been compared
+against the live app; all reviews are **review only, no apply** -- the design project was not
+modified and nothing was moved into code.
+
+- `01-studio` + `04-transcript-notes-export`: review `438a8810c0babe077709b6736cd82a4c` (Task 6 checkpoint above).
+- `02-library-empty`, `03-frames-tracking`, `05-mcp-app-inline-pip`: review **`c1c62da86891f479ae9b000cba24e19a`**
+  (`open-claude-design sync review c7f5fcb8-7b4f-4a4b-af9d-9f908d533d48 --direction to-code`, pairs:
+  `02` = `Panels/Library.tsx`; `03` = `Panels/Frames.tsx` + `Panels/Tracking.tsx`; `05` = `agent/mcpApp.ts` + `App.tsx`).
+  Compared the pulled design renders against live 1440x900 screenshots of `http://localhost:3000`.
+
+Differences found (deliberate unless marked otherwise; none reconciled back to the mockups):
+
+- **02 Library empty state.** The mockup is a full-page centered empty state ("Load a video to get
+  started": drop zone, *Sample library*, a *Connect an agent* card, the `npx skills add` command). The
+  app keeps its one two-pane shell in every state: the stage shows the user-requested `WelcomeExplainer`
+  and the Library panel sits in the rail (drop zone, samples, *Your videos*, *Import project*, storage
+  usage). The connect-an-agent list and install command live in the Skill tab. The mockup's
+  second sample, **Big Buck Bunny (clip)**, does not exist in the app (only Sprite Fight) -- a real gap,
+  not a deliberate change. The transport pill reads "Bridge · connected" (the scripting bridge is always
+  installed) instead of "No agent connected", and the app adds the theme toggle.
+- **03 Frames + Tracking.** The mockup puts the Frames grid in the main area (3 columns, "saved" badge,
+  filename + size row) and shows Tracking as per-keyframe score bars plus an on-demand Models list in
+  the rail. The app shows Frames as a 2-column tray in the rail (timestamp and dimensions, with
+  Describe / Read text / Upscale), Tracking as a box list (label editing, Draw box, Segment, Track 3s,
+  a one-line keyframe summary, no per-keyframe score bars), and Models as its own tab.
+- **05 MCP App.** In `displayMode:'inline'` the app renders the full studio shell including the 392px
+  rail; the mockup's inline view is a compact card (stage, chrome, "Chapters · N · Notes · N · via MCP
+  App" legend, "pop out" chip). Only `displayMode:'pip'` switches to the compact `focus` layout
+  (`mcpApp.ts`), which keeps the top bar and full timeline rather than the mockup's minimal chrome row.
+  There is no in-app "pop out" control (the host owns display mode). Neither mode was observed inside a
+  real host (TS-009), so this is checked from the code path and a standalone render only.
+
+Found while doing this review and fixed (see the plan's Deviations): the `<video>` rendered at its
+intrinsic size instead of filling the stage, so boxes and masks (percent-positioned on the stage) sat
+off the object whenever the video was smaller than the stage.
 
 ## Visual rules for implementation
 
