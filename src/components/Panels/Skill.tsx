@@ -89,8 +89,8 @@ export function Skill(): ReactElement {
       id: 'codex-cli',
       title: 'Codex CLI (HTTP bus)',
       steps: [
-        'Run npm run build:server once, then: codex mcp add agent-video-studio --env BUS_PORT=3334 -- node <repo>/server/dist/stdio.js (its own port -- the Claude Desktop extension already uses 3333)',
-        `Open this site (deployed, or npm run dev) with ?bus=http://localhost:3334 in a normal tab -- that tab is the UI; don't also call open_video_studio in this mode.`,
+        'Run npm run build:mcp-app && npm run build:server once, then: codex mcp add agent-video-studio --env BUS_PORT=3334 -- node <repo>/server/dist/stdio.js (its own port -- the Claude Desktop extension already uses 3333)',
+        `Open http://localhost:3334/?bus=http://localhost:3334 in a normal tab -- the studio served by the MCP server itself, and the session's UI. Chrome blocks this deployed site from reaching localhost unless you allow local network access. Once it's open, don't call open_video_studio again.`,
         'For headless codex exec, pre-approve the tools: default_tools_approval_mode = "approve" under [mcp_servers.agent-video-studio] in ~/.codex/config.toml.',
       ],
     },

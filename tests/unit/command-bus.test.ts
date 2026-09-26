@@ -45,6 +45,46 @@ describe('command bus (Task 11)', () => {
     expect(result).toEqual({ ok: false, error: 'ui_not_connected', hint: expect.any(String) });
   });
 
+  // A host that can't render MCP Apps (e.g. a Claude Code session) still calls open_video_studio:
+  // the instance is registered but no UI ever mounts to poll it.
+  describe('an opened instance that never connects', () => {
+    const UI_URL = 'https://example.test/studio/?bus=http://localhost:3333';
+    const opts = { ...FAST_OPTS, firstPollGraceMs: 20, uiFallbackUrl: UI_URL };
+
+    it('fails fast with ui_not_connected naming the fallback URL, instead of queuing a job that never finishes', async () => {
+      const bus = createCommandBus(opts);
+      bus.registerInstance('s1', 'inst-a');
+
+      const result = await bus.dispatch('s1', { name: 'get_state', args: {} });
+      expect(result).toEqual({ ok: false, error: 'ui_not_connected', hint: expect.stringContaining(UI_URL), uiUrl: UI_URL });
+      // Nothing is left queued for a UI that might attach later and replay stale commands.
+      expect(bus.pollCommands('s1', 'inst-a')).toMatchObject({ command: null });
+    });
+
+    it('still delivers a command sent before the first poll when the UI connects within the grace window', async () => {
+      const bus = createCommandBus(opts);
+      bus.registerInstance('s1', 'inst-a');
+
+      const dispatchPromise = bus.dispatch('s1', { name: 'seek', args: { time: 5 } });
+      await sleep(8); // an MCP App iframe mounting a moment after open_video_studio returned
+      const polled = bus.pollCommands('s1', 'inst-a');
+      const cmdId = (polled as { command: { cmdId: string } }).command.cmdId;
+      bus.postResult('s1', 'inst-a', cmdId, { ok: true, summary: 'seeked' });
+
+      expect(await dispatchPromise).toMatchObject({ ok: true, summary: 'seeked' });
+    });
+
+    it('a UI that went quiet also gets the fallback URL in its ui_not_connected hint', async () => {
+      const bus = createCommandBus(opts);
+      bus.registerInstance('s1', 'inst-a');
+      bus.pollCommands('s1', 'inst-a');
+      await sleep(FAST_OPTS.connectedWindowMs + 10);
+
+      const result = await bus.dispatch('s1', { name: 'seek', args: {} });
+      expect(result).toMatchObject({ ok: false, error: 'ui_not_connected', uiUrl: UI_URL, hint: expect.stringContaining(UI_URL) });
+    });
+  });
+
   it('a slow result returns {jobId, status:"running"} first, then get_job returns the late result', async () => {
     const bus = createCommandBus(FAST_OPTS);
     bus.registerInstance('s1', 'inst-a');

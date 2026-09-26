@@ -15,6 +15,12 @@ const manifest = manifestData as ManifestTool[];
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_MCP_APP_HTML_PATH = path.join(__dirname, '..', 'dist', 'mcp-app.html');
+
+/** The built single-file studio: the MCP App resource, and (server/stdio.ts) the page a host
+ * without MCP App rendering opens instead. */
+export function readBundledAppHtml(): Promise<string> {
+  return readFile(DEFAULT_MCP_APP_HTML_PATH, 'utf-8');
+}
 const RESOURCE_URI = 'ui://agent-video-studio/app.html';
 
 /** `image` (posted separately from `result` -- see `bus.ts`'s own `ImagePayload` doc comment) becomes
@@ -33,6 +39,10 @@ export interface CreateServerOptions {
    * `server/test/server.test.ts` doesn't depend on a real `npm run build` having produced
    * `dist/mcp-app.html` first. */
   readAppHtml?: () => Promise<string>;
+  /** A page that can act as this session's UI in any browser tab (the site with `?bus=...`).
+   * `open_video_studio` names it so an agent in a host that can't render MCP Apps (a Claude Code
+   * session, for one) has somewhere to go instead of queuing commands no UI will run. */
+  uiFallbackUrl?: string;
 }
 
 /**
@@ -44,7 +54,7 @@ export interface CreateServerOptions {
  * per session and keep the returned server alive for that session's lifetime.
  */
 export function createServer(busSessionId: string, bus: CommandBus, options: CreateServerOptions = {}): McpServer {
-  const readAppHtml = options.readAppHtml ?? (() => readFile(DEFAULT_MCP_APP_HTML_PATH, 'utf-8'));
+  const readAppHtml = options.readAppHtml ?? readBundledAppHtml;
   const server = new McpServer({ name: 'agent-video-studio', version: '0.1.0' });
 
   registerAppTool(
@@ -71,9 +81,12 @@ export function createServer(busSessionId: string, bus: CommandBus, options: Cre
     async (args): Promise<CallToolResult> => {
       const instanceId = randomUUID();
       bus.registerInstance(busSessionId, instanceId);
+      const fallback = options.uiFallbackUrl
+        ? ` If the studio does not appear in this conversation (some hosts, such as Claude Code sessions, don't render MCP Apps), open ${options.uiFallbackUrl} in a browser tab instead -- that tab becomes the UI for every tool (then call load_video). Don't open it if the studio did appear: it would take over from it.`
+        : '';
       return {
-        content: [{ type: 'text', text: 'Opened Agent Video Studio.' }],
-        structuredContent: { instanceId, load: args },
+        content: [{ type: 'text', text: `Opened Agent Video Studio.${fallback}` }],
+        structuredContent: { instanceId, load: args, ...(options.uiFallbackUrl ? { uiUrl: options.uiFallbackUrl } : {}) },
       };
     },
   );

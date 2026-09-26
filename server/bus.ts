@@ -31,7 +31,7 @@ export interface ImagePayload {
 export type DispatchResult =
   | { ok: true; jobId: string; status: 'running' }
   | ({ ok: boolean; instanceId: string; asset?: string; image?: ImagePayload } & Record<string, unknown>)
-  | { ok: false; error: 'ui_not_connected'; hint: string }
+  | { ok: false; error: 'ui_not_connected'; hint: string; uiUrl?: string }
   | { ok: false; error: 'instance_asset_changed'; instanceId: string; asset?: string };
 
 export interface JobStatus {
@@ -48,6 +48,9 @@ interface InstanceInfo {
   assetId?: string;
   lastPollAt: number;
   active: boolean;
+  /** False until a UI has actually polled for this instance. `open_video_studio` registers an
+   * instance before any UI exists, and in a host that can't render MCP Apps none ever will. */
+  hasPolled: boolean;
 }
 
 interface PendingCommand {
@@ -81,11 +84,18 @@ export interface CommandBusOptions {
   dispatchTimeoutMs?: number;
   /** How long a stored result stays retrievable via `getJob` after `postResult`. Default 10min. */
   resultTtlMs?: number;
+  /** How long a command waits for a freshly opened instance's first poll before failing with
+   * `ui_not_connected` rather than becoming a job no UI will ever run. Default 12s -- enough for a
+   * real MCP App iframe to mount after `open_video_studio` returns. */
+  firstPollGraceMs?: number;
+  /** A page that can act as this session's UI in any browser (the site with `?bus=<this bus>`),
+   * named in every `ui_not_connected` so an agent whose host can't render the MCP App can open it. */
+  uiFallbackUrl?: string;
   /** Injectable clock, real `Date.now` by default. */
   now?: () => number;
 }
 
-const DEFAULTS = { connectedWindowMs: 15_000, dispatchTimeoutMs: 25_000, resultTtlMs: 600_000 };
+const DEFAULTS = { connectedWindowMs: 15_000, dispatchTimeoutMs: 25_000, resultTtlMs: 600_000, firstPollGraceMs: 12_000 };
 
 export interface CommandBus {
   /** Called when a render tool (`open_video_studio`) creates a fresh UI instance. Retires every
@@ -111,7 +121,16 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
   const connectedWindowMs = options.connectedWindowMs ?? DEFAULTS.connectedWindowMs;
   const dispatchTimeoutMs = options.dispatchTimeoutMs ?? DEFAULTS.dispatchTimeoutMs;
   const resultTtlMs = options.resultTtlMs ?? DEFAULTS.resultTtlMs;
+  const firstPollGraceMs = options.firstPollGraceMs ?? DEFAULTS.firstPollGraceMs;
+  const uiFallbackUrl = options.uiFallbackUrl;
   const now = options.now ?? (() => Date.now());
+
+  function notConnected(reason: string): DispatchResult {
+    const where = uiFallbackUrl
+      ? `render the MCP App (open_video_studio) in a host that shows MCP Apps, or open ${uiFallbackUrl} in a browser tab -- that tab becomes the UI for every tool`
+      : 'render the MCP App (open_video_studio), or open the site with ?bus=<this server\'s bus URL> in a browser tab';
+    return { ok: false, error: 'ui_not_connected', hint: `${reason} To get one: ${where}.`, ...(uiFallbackUrl ? { uiUrl: uiFallbackUrl } : {}) };
+  }
 
   const sessions = new Map<string, Session>();
 
@@ -142,7 +161,7 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
   function registerInstance(sessionId: string, instanceId: string, assetId?: string): void {
     const session = getOrCreateSession(sessionId);
     activate(session, instanceId);
-    session.instances.set(instanceId, { instanceId, assetId, lastPollAt: now(), active: true });
+    session.instances.set(instanceId, { instanceId, assetId, lastPollAt: now(), active: true, hasPolled: false });
     if (!session.pendingByInstance.has(instanceId)) session.pendingByInstance.set(instanceId, []);
   }
 
@@ -153,7 +172,9 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
       return;
     }
     activate(session, instanceId);
-    session.instances.get(instanceId)!.lastPollAt = now();
+    const inst = session.instances.get(instanceId)!;
+    inst.lastPollAt = now();
+    inst.hasPolled = true; // only a mounted UI calls activate_instance
   }
 
   function retireInstance(sessionId: string, instanceId: string): void {
@@ -166,6 +187,7 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
     const inst = session.instances.get(instanceId);
     if (!inst || !inst.active) return { retired: true };
     inst.lastPollAt = now();
+    inst.hasPolled = true;
     const queue = session.pendingByInstance.get(instanceId) ?? [];
     const next = queue.find((c) => !c.delivered);
     if (!next) return { command: null };
@@ -205,7 +227,7 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
 
     const active = getActiveInstance(session);
     if (!active || now() - active.lastPollAt > connectedWindowMs) {
-      return { ok: false, error: 'ui_not_connected', hint: 'No UI instance has polled recently. Render the MCP App (open_video_studio) or open the site with the bus URL first.' };
+      return notConnected('No UI instance has polled recently.');
     }
     if (cmd.expectedAssetId !== undefined && active.assetId !== cmd.expectedAssetId) {
       return { ok: false, error: 'instance_asset_changed', instanceId: active.instanceId, asset: active.assetId };
@@ -222,8 +244,24 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
       session.pendingByInstance.set(active.instanceId, queue);
     });
 
-    const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), dispatchTimeoutMs));
-    const winner = await Promise.race([resultPromise, timeout]);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const timeout = new Promise<'timeout'>((resolve) => timers.push(setTimeout(() => resolve('timeout'), dispatchTimeoutMs)));
+    // Resolves only if the instance still has never polled once the grace period is over; a UI that
+    // does connect in time leaves this pending and the normal result/timeout race decides.
+    const neverConnected = active.hasPolled
+      ? new Promise<never>(() => {})
+      : new Promise<'never_connected'>((resolve) =>
+          timers.push(setTimeout(() => { if (!active.hasPolled) resolve('never_connected'); }, firstPollGraceMs)),
+        );
+    const winner = await Promise.race([resultPromise, timeout, neverConnected]);
+    for (const t of timers) clearTimeout(t);
+    if (winner === 'never_connected') {
+      session.pendingById.delete(cmdId);
+      const queue = session.pendingByInstance.get(active.instanceId);
+      if (queue) queue.splice(queue.findIndex((c) => c.cmdId === cmdId), 1);
+      if (cmd.requestId) session.requestIdIndex.delete(cmd.requestId);
+      return notConnected('The studio was opened, but no UI has connected to it -- this host may not render MCP Apps.');
+    }
     if (winner === 'timeout') {
       return { ok: true, jobId: cmdId, status: 'running' };
     }

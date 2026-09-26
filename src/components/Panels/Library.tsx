@@ -6,7 +6,7 @@ import { DEFAULT_PROJECT_ID } from '../../lib/types';
 import type { Asset } from '../../lib/types';
 import { loadSource } from '../../media/load';
 import { applyImportedProject, parseProjectZip } from '../../media/project';
-import type { SampleCatalogEntry } from '../../media/source';
+import { SAMPLE_CATALOG } from '../../media/samples';
 import { readStorageEstimate } from '../../store/persist';
 import { ensurePersisted } from '../../store/persist';
 import { importFile, listLibraryAssets, removeLibraryAsset } from '../../store/library';
@@ -20,7 +20,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function Library(): ReactElement {
-  const [samples, setSamples] = useState<SampleCatalogEntry[]>([]);
+  const samples = SAMPLE_CATALOG;
   const [assets, setAssets] = useState<Asset[]>([]);
   const [storageEstimate, setStorageEstimate] = useState({ usage: 0, quota: 0 });
   const [persisted, setPersisted] = useState(true);
@@ -38,10 +38,6 @@ export function Library(): ReactElement {
   }
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}samples/index.json`)
-      .then((r) => r.json())
-      .then((data: { samples: SampleCatalogEntry[] }) => setSamples(data.samples))
-      .catch(() => setSamples([]));
     void refreshAssets();
   }, []);
 

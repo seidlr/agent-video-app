@@ -37,6 +37,23 @@ test.describe('MCP server (Task 11)', () => {
     await client.close();
   });
 
+  test('open_video_studio tells a host that cannot render MCP Apps which page to open instead', async () => {
+    const uiUrl = 'https://example.test/studio/?bus=http://localhost:3333';
+    const server = createServer('test-session', createCommandBus({ uiFallbackUrl: uiUrl }), {
+      readAppHtml: async () => '<!doctype html><html><body>stub</body></html>',
+      uiFallbackUrl: uiUrl,
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const result = (await client.callTool({ name: 'open_video_studio', arguments: {} })) as CallToolResult;
+    expect((result.structuredContent as { uiUrl?: string }).uiUrl).toBe(uiUrl);
+    expect((result.content[0] as { text: string }).text).toContain(uiUrl);
+
+    await client.close();
+  });
+
   test('every manifest tool is registered and carries the manifest\'s own annotations', async () => {
     const { client } = await connect();
 

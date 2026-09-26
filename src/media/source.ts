@@ -1,5 +1,6 @@
 import type { AssetKind } from '../lib/types';
 import { fetchYouTubeOEmbed, parseYouTubeId, ytimgThumbnailUrls } from './youtube';
+import { SAMPLE_CATALOG } from './samples';
 
 export interface SampleCatalogEntry {
   id: string;
@@ -59,9 +60,7 @@ export interface SourceDeps {
 export function defaultSourceDeps(readLibraryFile: SourceDeps['readLibraryFile']): SourceDeps {
   return {
     async fetchSamples() {
-      const res = await fetch(`${import.meta.env.BASE_URL}samples/index.json`);
-      if (!res.ok) throw new Error(`failed_to_load_samples: HTTP ${res.status}`);
-      return res.json();
+      return { samples: SAMPLE_CATALOG };
     },
     async probeCors(url) {
       try {
