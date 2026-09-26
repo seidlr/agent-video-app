@@ -54,10 +54,18 @@ what the agent just did.
 
 Codex CLI has no MCP App rendering, so a plain browser tab of the site acts as its UI instead:
 
-1. Run `npm run build:server` once, then: `codex mcp add agent-video-studio -- node <repo>/server/dist/stdio.js`
-2. Open the site (deployed, or `npm run dev`) with `?bus=http://localhost:3333` in a normal browser
+1. Run `npm run build:server` once, then:
+   `codex mcp add agent-video-studio --env BUS_PORT=3334 -- node <repo>/server/dist/stdio.js`
+   (its own port: the Claude Desktop extension, if installed, already serves its bus on the default
+   3333, and a tab pointed at a shared port can silently attach to the wrong server).
+2. Open the site (deployed, or `npm run dev`) with `?bus=http://localhost:3334` in a normal browser
    tab -- that tab is the session's only UI instance. Don't also call `open_video_studio` in this
    mode; it registers a second, competing UI instance that retires the tab you just opened.
+3. Interactive `codex` asks you to approve each tool call. Headless `codex exec` can't ask, so it
+   rejects them ("requires approval, but approval policy is never") unless the server's tools are
+   pre-approved: add `default_tools_approval_mode = "approve"` under
+   `[mcp_servers.agent-video-studio]` in `~/.codex/config.toml`, or pass
+   `-c 'mcp_servers.agent-video-studio.default_tools_approval_mode="approve"'` for one run.
 
 ## Verifying a connection
 
