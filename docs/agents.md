@@ -15,7 +15,7 @@ carries the same steps as part of the installable skill bundle.
 | ChatGPT Desktop / Codex sessions in a Chromium browser | site tools (same WebMCP registration) | Unverified -- depends on host-side model/version support (see Unverified items) |
 | MCP-B extension (`@mcp-b/global`) | polyfill + cross-tab transport | **Verified** -- this is also the fallback that makes native WebMCP-less browsers work at all |
 | Claude in Chrome / Claude Desktop's own browser | `window.agentVideo` scripting bridge | **Verified** |
-| Claude Desktop | `.mcpb` MCP App | **Installed live** -- installs, starts and answers `initialize`/`tools/list`/`resources/list` in Claude Desktop; the inline/PiP render in a chat is not yet observed (see Unverified items) |
+| Claude Desktop | `.mcpb` MCP App | **Installed live**; render fixed and verified in a spec-compliant host (`tests/e2e/mcp-app-host.spec.ts`), not yet re-observed in a Claude chat (see Unverified items) |
 | ChatGPT Desktop / VS Code / a Claude connector | MCP-over-HTTP connector | Not run -- needs a public HTTPS tunnel; see below |
 | Codex CLI (no browser UI) | HTTP command bus driving a normal tab | **Verified live** with codex-cli 0.153.4 (see below) |
 
@@ -84,6 +84,22 @@ URL will not work. Run `npm run mcp:dev` (Streamable HTTP on port 3001) and expo
 e.g. `brew install cloudflared && cloudflared tunnel --url http://localhost:3001`, then add that
 HTTPS URL as the host's connector. Not run against a live host in this repository's own
 verification -- see Unverified items.
+
+### Claude chat showed "There was a problem displaying content"
+
+Found live (2026-09-26, extension 0.1.1): in a real Claude chat, `open_video_studio` ran but the studio
+never rendered, and Claude never even requested the `ui://` resource. Two defects: the server put
+`csp`, `domain` and `prefersBorder` on the tool's `_meta.ui` (the MCP Apps spec puts them on the
+resource's contents) with a bare `domain: 'agent-video-studio'` where hosts expect their own format
+(`{hash}.claudemcpcontent.com`); and the view only switched into MCP App mode on an opaque origin or
+`?mcp=1`, so a host serving it from a real sandbox origin would have booted it as a plain site that
+never talked to the host. Fixed in 0.1.2 (hints moved to the resource, no `domain`; any framed page
+is an MCP App view) and verified by `tests/e2e/mcp-app-host.spec.ts`: a spec-compliant host
+(double-iframe sandbox on separate origins, the spec's CSP built from `_meta.ui.csp`, the
+ext-apps SDK's own `AppBridge`) renders the studio, which receives `open_video_studio`'s result,
+loads the sample itself, and serves `seek` and `capture_frame`. Under that strict CSP one thing
+stays blocked: the chapters text track is a `data:` URL, so the timeline's hover preview has no
+chapter title inside the MCP App.
 
 ### Hosts without MCP App rendering (e.g. a Claude Code session)
 
@@ -168,7 +184,7 @@ Tracked here rather than silently assumed, per this project's own verification d
   own persistent OPFS/IndexedDB origin inside a real Claude Desktop install, or something more
   ephemeral -- has not been observed live, since that needs a real Claude Desktop app. Whoever runs
   TS-009 first should note the console's `[mcp-app] storage probe:` line here.
-- **The MCP App render inside a Claude Desktop chat**: the `.mcpb` was installed in a real
+- **The MCP App render inside a Claude Desktop chat, after the 0.1.2 fix**: the `.mcpb` was installed in a real
   Claude Desktop (2026-09-26) and its log shows the server starting and answering `initialize`,
   `tools/list` and `resources/list`. What has not been observed yet is TS-009's own steps: a chat
   calling `open_video_studio` and the studio rendering inline and in PiP, which needs someone to
