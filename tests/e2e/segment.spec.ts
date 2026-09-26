@@ -35,10 +35,16 @@ async function loadFixtureAndWaitReady(page: Page, query = ''): Promise<void> {
 test.describe('vision tools: segment/track/models @ml', () => {
   test('list_models/load_model/unload_model (Task 7 DoD)', async ({ page }) => {
     test.setTimeout(180_000);
-    const hubRequests: string[] = [];
-    page.on('request', (req) => {
-      if (req.url().includes('huggingface.co')) hubRequests.push(req.url());
+    // Bytes actually received for model-weight files (.onnx / .onnx_data), measured from the
+    // response body rather than counted requests: list_models' live size lookup reads each model's
+    // config JSON and probes every weight file's size with a 1-byte range read (user-agreed: keep
+    // live sizes), so hub traffic before a confirmed load is expected -- weights are not.
+    const weightBodySizes: Promise<number>[] = [];
+    page.on('response', (res) => {
+      if (!/\.onnx/.test(decodeURIComponent(res.url()))) return;
+      weightBodySizes.push(res.finished().then(async () => (await res.request().sizes()).responseBodySize).catch(() => 0));
     });
+    const largestWeightBody = async (): Promise<number> => Math.max(0, ...(await Promise.all(weightBodySizes)));
 
     await page.goto('/');
 
@@ -55,20 +61,20 @@ test.describe('vision tools: segment/track/models @ml', () => {
     const edgetamRow = models.find((m) => m.id === 'edgetam');
     expect(edgetamRow).toMatchObject({ cached: false, loaded: false });
 
-    // DoD: network inspection shows zero huggingface.co requests until the first confirmed
-    // load_model/tool call.
-    expect(hubRequests).toEqual([]);
+    // DoD (amended, user-agreed): no model weights are downloaded until the first confirmed
+    // load_model/tool call -- only size metadata.
+    expect(await largestWeightBody()).toBeLessThan(64 * 1024);
 
     // DoD: without confirmDownload, load_model returns model_not_loaded naming the MB.
     const withoutConfirm = await execTool(page, 'load_model', { id: 'edgetam' });
     expect(withoutConfirm).toMatchObject({ ok: false, error: 'model_not_loaded' });
     expect(withoutConfirm.hint as string).toContain(`${edgetamRow!.sizeMB}MB`);
-    expect(hubRequests).toEqual([]); // still nothing fetched from a mere size-checking call
+    expect(await largestWeightBody()).toBeLessThan(64 * 1024); // still no weights from a size-checking call
 
     // DoD: with confirmDownload, the job completes and loaded:true.
     const withConfirm = await execTool(page, 'load_model', { id: 'edgetam', confirmDownload: true, waitSeconds: 60 });
     expect(withConfirm.ok).toBe(true);
-    expect(hubRequests.length).toBeGreaterThan(0); // the actual download happened now
+    expect(await largestWeightBody()).toBeGreaterThan(1_000_000); // the actual weights downloaded now
 
     const afterLoad = await execTool(page, 'list_models');
     expect((afterLoad.models as { id: string; loaded: boolean }[]).find((m) => m.id === 'edgetam')).toMatchObject({ loaded: true });
