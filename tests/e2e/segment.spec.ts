@@ -96,6 +96,29 @@ test.describe('vision tools: segment/track/models @ml', () => {
     expect(result.score as number).toBeGreaterThanOrEqual(0.7);
   });
 
+  test('segment keeps working after a reload, once the model is cached', async ({ page }) => {
+    test.setTimeout(240_000);
+    await loadFixtureAndWaitReady(page);
+    await execTool(page, 'seek', { time: '1' });
+    const first = await execTool(page, 'segment', { points: [{ x: 0.35, y: 0.5, label: 1 }], confirmDownload: true, waitSeconds: 60 });
+    expect(first.ok).toBe(true);
+
+    // A reload drops the resident worker but keeps the downloaded files in Cache Storage, so the
+    // next call goes through the "is it already cached?" check instead of the resident shortcut --
+    // the path that failed with "Unsupported pipeline task: mask-generation" for a model that loads
+    // via from_pretrained rather than pipeline().
+    await loadFixtureAndWaitReady(page);
+    await execTool(page, 'seek', { time: '1' });
+
+    const listed = await execTool(page, 'list_models');
+    expect(listed.ok).toBe(true);
+    const models = listed.models as { id: string; cached: boolean }[];
+    expect(models.find((m) => m.id === 'edgetam')).toMatchObject({ cached: true });
+
+    const second = await execTool(page, 'segment', { points: [{ x: 0.35, y: 0.5, label: 1 }], waitSeconds: 60 });
+    expect(second).toMatchObject({ ok: true });
+  });
+
   test('segment finds the moving square at t=1s (DoD: ?ml=wasm)', async ({ page }) => {
     test.setTimeout(180_000);
     await loadFixtureAndWaitReady(page, '?ml=wasm');

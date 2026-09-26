@@ -15,8 +15,8 @@ export interface ModelCatalogEntry {
   id: string;
   /** transformers.js pipeline task name -- what `ModelRegistry.get_pipeline_files`/
    * `is_pipeline_cached` key off when `usesPipeline` isn't `false`. For a model loaded via a raw
-   * `AutoModelForX`/`AutoProcessor` pair instead of `pipeline()` (pyannote has no corresponding
-   * pipeline task), this is a cosmetic label only -- `ml/client.ts` routes size/cache checks
+   * `AutoModelForX`/`AutoProcessor` pair instead of `pipeline()` (pyannote, EdgeTAM/SlimSAM have no
+   * corresponding pipeline task), this is a cosmetic label only -- `ml/client.ts` routes size/cache checks
    * through the generic, task-agnostic `ModelRegistry.get_files`/`is_cached` instead. */
   task: string;
   /** Hugging Face repo id, e.g. "onnx-community/EdgeTAM-ONNX". */
@@ -42,12 +42,22 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     id: 'edgetam',
     task: 'mask-generation',
     repo: 'onnx-community/EdgeTAM-ONNX',
-    dtype: { vision_encoder: 'fp16', prompt_encoder_mask_decoder: 'fp32' },
+    // `model` duplicates `vision_encoder` on purpose: transformers.js 4.2.0 resolves a per-module
+    // dtype by file name when loading (vision_encoder -> vision_encoder_fp16.onnx) but by session
+    // key when listing files for is_cached/get_files (the mask-generation session is keyed
+    // `model`). Without it the cache check looked for the fp32 vision_encoder.onnx that is never
+    // downloaded and reported a cached EdgeTAM as not cached. Drop it once both paths agree.
+    dtype: { model: 'fp16', vision_encoder: 'fp16', prompt_encoder_mask_decoder: 'fp32' },
     family: 'segment',
     device: 'webgpu',
     license: 'Apache-2.0',
     url: 'https://huggingface.co/onnx-community/EdgeTAM-ONNX',
     approxMB: 31,
+    // segment.worker.ts loads EdgeTAM/SlimSAM via Model.from_pretrained + AutoProcessor, and
+    // 'mask-generation' is not a transformers.js pipeline task: routed through
+    // is_pipeline_cached, the cache check threw "Unsupported pipeline task" as soon as the files
+    // were cached, breaking segment and list_models after the first download.
+    usesPipeline: false,
   },
   {
     id: 'slimsam',
@@ -59,6 +69,7 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     license: 'Apache-2.0',
     url: 'https://huggingface.co/Xenova/slimsam-77-uniform',
     approxMB: 14,
+    usesPipeline: false,
   },
   // Whisper's own repo/dtype is identical regardless of execution backend -- unlike the
   // EdgeTAM/SlimSAM split above, there is only one catalog id per tier. `device` here is a
