@@ -70,7 +70,9 @@ test.describe('MCP server (Task 11)', () => {
 
     const result = (await client.callTool({ name: 'open_video_studio', arguments: {} })) as CallToolResult;
     expect((result.structuredContent as { uiUrl?: string }).uiUrl).toBe(uiUrl);
-    expect((result.content[0] as { text: string }).text).toContain(uiUrl);
+    // This test client advertises no MCP Apps UI support, so the link leads instead of trailing
+    // behind an "if the studio does not appear" -- it won't appear.
+    expect((result.content[0] as { text: string }).text).toMatch(new RegExp(`^This host did not advertise MCP Apps support.*${uiUrl.replace(/[?.]/g, '\\$&')}`));
 
     await client.close();
   });

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
+import { getUiCapability, registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { ManifestTool } from '../src/agent/registry.js';
@@ -55,7 +55,18 @@ export interface CreateServerOptions {
  */
 export function createServer(busSessionId: string, bus: CommandBus, options: CreateServerOptions = {}): McpServer {
   const readAppHtml = options.readAppHtml ?? readBundledAppHtml;
-  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.2' });
+  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.3' });
+
+  // Whether this client said it can render MCP Apps (the `io.modelcontextprotocol/ui` extension).
+  // Logged to stderr -- a host's extension log -- because "the studio never appeared" is otherwise
+  // indistinguishable between "host can't render apps" and "host tried and failed".
+  let clientRendersApps = false;
+  server.server.oninitialized = () => {
+    const client = server.server.getClientVersion();
+    const ui = getUiCapability(server.server.getClientCapabilities());
+    clientRendersApps = ui !== undefined;
+    console.error(`[agent-video-studio] client ${client?.name ?? 'unknown'} ${client?.version ?? ''}: MCP Apps UI ${ui ? `advertised ${JSON.stringify(ui)}` : 'not advertised'}`);
+  };
 
   registerAppTool(
     server,
@@ -82,11 +93,14 @@ export function createServer(busSessionId: string, bus: CommandBus, options: Cre
     async (args): Promise<CallToolResult> => {
       const instanceId = randomUUID();
       bus.registerInstance(busSessionId, instanceId);
-      const fallback = options.uiFallbackUrl
-        ? ` If the studio does not appear in this conversation (some hosts, such as Claude Code sessions, don't render MCP Apps), open ${options.uiFallbackUrl} in a browser tab instead -- that tab becomes the UI for every tool (then call load_video). Don't open it if the studio did appear: it would take over from it.`
-        : '';
+      let text = 'Opened Agent Video Studio.';
+      if (options.uiFallbackUrl && !clientRendersApps) {
+        text = `This host did not advertise MCP Apps support, so the studio will not render here. Open ${options.uiFallbackUrl} in a browser tab -- that tab becomes the UI for every tool -- then call load_video.`;
+      } else if (options.uiFallbackUrl) {
+        text += ` If the studio does not appear in this conversation, open ${options.uiFallbackUrl} in a browser tab instead -- that tab becomes the UI for every tool (then call load_video). Don't open it if the studio did appear: it would take over from it.`;
+      }
       return {
-        content: [{ type: 'text', text: `Opened Agent Video Studio.${fallback}` }],
+        content: [{ type: 'text', text }],
         structuredContent: { instanceId, load: args, ...(options.uiFallbackUrl ? { uiUrl: options.uiFallbackUrl } : {}) },
       };
     },
