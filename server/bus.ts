@@ -151,6 +151,14 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
     return [...session.instances.values()].find((inst) => inst.active);
   }
 
+  /** The most recently polling other instance, if any polled within the connected window. */
+  function liveFallback(session: Session, exceptId: string): InstanceInfo | undefined {
+    const cutoff = now() - connectedWindowMs;
+    return [...session.instances.values()]
+      .filter((inst) => inst.instanceId !== exceptId && inst.hasPolled && inst.lastPollAt >= cutoff)
+      .sort((a, b) => b.lastPollAt - a.lastPollAt)[0];
+  }
+
   function pruneExpiredResults(session: Session): void {
     const cutoff = now() - resultTtlMs;
     for (const [cmdId, stored] of session.results) {
@@ -185,11 +193,14 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
   function pollCommands(sessionId: string, instanceId: string): ReturnType<CommandBus['pollCommands']> {
     const session = getOrCreateSession(sessionId);
     const inst = session.instances.get(instanceId);
-    if (!inst || !inst.active) return { retired: true };
+    if (!inst) return { retired: true };
+    // Record every poll, active or not: a retired UI that keeps polling is still alive, and
+    // dispatch may route to it (see liveFallback).
     inst.lastPollAt = now();
     inst.hasPolled = true;
     const queue = session.pendingByInstance.get(instanceId) ?? [];
     const next = queue.find((c) => !c.delivered);
+    if (!inst.active && !next) return { retired: true };
     if (!next) return { command: null };
     next.delivered = true;
     return { command: { cmdId: next.cmdId, name: next.name, args: next.args } };
@@ -225,7 +236,12 @@ export function createCommandBus(options: CommandBusOptions = {}): CommandBus {
       }
     }
 
-    const active = getActiveInstance(session);
+    let active = getActiveInstance(session);
+    // A view registered by open_video_studio that hasn't polled yet (maybe never will: a host that
+    // lists the tools but doesn't render MCP Apps) must not strand a UI that is live right now --
+    // found live in a Claude chat, where a repeat open_video_studio retired the working ?bus= tab.
+    // Commands go to the live one until the new view actually connects and takes over.
+    if (active && !active.hasPolled) active = liveFallback(session, active.instanceId) ?? active;
     if (!active || now() - active.lastPollAt > connectedWindowMs) {
       return notConnected('No UI instance has polled recently.');
     }

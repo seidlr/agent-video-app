@@ -74,6 +74,38 @@ describe('command bus (Task 11)', () => {
       expect(await dispatchPromise).toMatchObject({ ok: true, summary: 'seeked' });
     });
 
+    // Found live in a Claude chat: the page from uiUrl was open and working, then the agent called
+    // open_video_studio again -- registering a view that never rendered -- and that retired the
+    // live tab, so every later call waited out the grace and failed.
+    it('does not strand a live tab: commands keep going to it until the new instance actually polls', async () => {
+      const bus = createCommandBus(opts);
+      bus.registerInstance('s1', 'tab');
+      bus.pollCommands('s1', 'tab');
+      bus.registerInstance('s1', 'never-rendered');
+
+      const started = Date.now();
+      const dispatchPromise = bus.dispatch('s1', { name: 'seek', args: { time: 5 } });
+      const polled = bus.pollCommands('s1', 'tab');
+      expect(polled).toMatchObject({ command: { name: 'seek' } });
+      bus.postResult('s1', 'tab', (polled as { command: { cmdId: string } }).command.cmdId, { ok: true, summary: 'seeked' });
+      expect(await dispatchPromise).toMatchObject({ ok: true, summary: 'seeked', instanceId: 'tab' });
+      expect(Date.now() - started).toBeLessThan(opts.firstPollGraceMs);
+    });
+
+    it('a newly opened instance takes over once it polls', async () => {
+      const bus = createCommandBus(opts);
+      bus.registerInstance('s1', 'tab');
+      bus.pollCommands('s1', 'tab');
+      bus.registerInstance('s1', 'app');
+      expect(bus.pollCommands('s1', 'app')).toMatchObject({ command: null });
+
+      const dispatchPromise = bus.dispatch('s1', { name: 'seek', args: {} });
+      expect(bus.pollCommands('s1', 'tab')).toEqual({ retired: true });
+      const polled = bus.pollCommands('s1', 'app');
+      bus.postResult('s1', 'app', (polled as { command: { cmdId: string } }).command.cmdId, { ok: true, summary: 'seeked' });
+      expect(await dispatchPromise).toMatchObject({ ok: true, instanceId: 'app' });
+    });
+
     it('a UI that went quiet also gets the fallback URL in its ui_not_connected hint', async () => {
       const bus = createCommandBus(opts);
       bus.registerInstance('s1', 'inst-a');
