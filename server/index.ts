@@ -55,7 +55,7 @@ export interface CreateServerOptions {
  */
 export function createServer(busSessionId: string, bus: CommandBus, options: CreateServerOptions = {}): McpServer {
   const readAppHtml = options.readAppHtml ?? readBundledAppHtml;
-  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.0' });
+  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.1' });
 
   registerAppTool(
     server,
