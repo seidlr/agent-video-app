@@ -85,16 +85,32 @@ e.g. `brew install cloudflared && cloudflared tunnel --url http://localhost:3001
 HTTPS URL as the host's connector. Not run against a live host in this repository's own
 verification -- see Unverified items.
 
+### Hosts without MCP App rendering (e.g. a Claude Code session)
+
+Found live (2026-09-26): with the `.mcpb` installed, a Claude Code session in Claude Desktop can call
+every tool, but it doesn't render MCP Apps, so `open_video_studio` "succeeded" and no studio ever
+mounted. Calls made in the next 15 s queued as jobs that could never finish, and later ones got a
+`ui_not_connected` whose hint didn't say where to go. Now `open_video_studio` names a page the
+agent can open instead (`uiUrl`: `http://localhost:<bus port>/?bus=...`, served by the same server),
+and a call to an opened-but-never-connected instance fails after a 12 s grace with
+`ui_not_connected` carrying that same link. Verified by `tests/e2e/bus-self-hosted.spec.ts`: a plain
+MCP client with no app rendering opens the handed-back page in Chrome, then `load_video`, `seek`
+and `capture_frame` (with its image block) all complete.
+
 ### Codex CLI (HTTP command bus)
 
 Codex CLI has no MCP App rendering, so a plain browser tab of the site acts as its UI instead:
 
 ```bash
-codex mcp add agent-video-studio --env BUS_PORT=3334 -- node <repo>/server/dist/stdio.js   # after npm run build:server
+codex mcp add agent-video-studio --env BUS_PORT=3334 -- node <repo>/server/dist/stdio.js   # after npm run build:mcp-app && npm run build:server
 ```
 
-then open the site (deployed, or `npm run dev`) with `?bus=http://localhost:3334` in a normal
-browser tab. Codex gets its own bus port because the Claude Desktop extension, once installed,
+then open `http://localhost:3334/?bus=http://localhost:3334` in a normal browser tab: the studio,
+served by the MCP server itself on its bus port. Pointing the deployed site at the local bus
+(`https://seidlr.github.io/agent-video-app/?bus=http://localhost:3334`) no longer works by
+default: Chrome 154 blocks it with "Permission was denied for this request to access the
+`loopback` address space" unless the user grants local network access, which headless and
+embedded browsers can't (confirmed live). The same-origin page needs neither that nor CORS. Codex gets its own bus port because the Claude Desktop extension, once installed,
 keeps its server running with the bus on the default 3333 (observed live: Claude Desktop holding
 `*:3333`), and a second server could still bind `localhost:3333` alongside it -- so a tab pointed at
 the shared port can attach to the wrong server and every Codex call returns `ui_not_connected`.

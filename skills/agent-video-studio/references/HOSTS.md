@@ -50,17 +50,30 @@ what the agent just did.
    capture_frame, segment, transcribe, ...) dispatches through an instance-bound command bus to
    whichever UI instance (the rendered MCP App, or a normal browser tab) is currently active.
 
+## Hosts that list the tools but don't render MCP Apps
+
+A Claude Code session (including the Code tab in Claude Desktop) can call every tool, but it does
+not render the studio: `open_video_studio` succeeds and nothing appears. The result's text and
+`uiUrl` name a local page -- `http://localhost:<bus port>/?bus=...`, served by the same server --
+that becomes the UI when opened in any browser tab (an agent with a built-in browser can open it
+itself). Until something connects, other tools return `ui_not_connected` with the same link after
+about 12 s, instead of queuing jobs no UI will run.
+
 ## Codex CLI (HTTP bus)
 
 Codex CLI has no MCP App rendering, so a plain browser tab of the site acts as its UI instead:
 
-1. Run `npm run build:server` once, then:
+1. Run `npm run build:mcp-app && npm run build:server` once, then:
    `codex mcp add agent-video-studio --env BUS_PORT=3334 -- node <repo>/server/dist/stdio.js`
    (its own port: the Claude Desktop extension, if installed, already serves its bus on the default
    3333, and a tab pointed at a shared port can silently attach to the wrong server).
-2. Open the site (deployed, or `npm run dev`) with `?bus=http://localhost:3334` in a normal browser
-   tab -- that tab is the session's only UI instance. Don't also call `open_video_studio` in this
-   mode; it registers a second, competing UI instance that retires the tab you just opened.
+2. Open `http://localhost:3334/?bus=http://localhost:3334` in a normal browser tab -- the studio,
+   served by the MCP server itself. That tab is the session's only UI instance. Prefer it over the
+   deployed site with `?bus=`: Chrome now blocks a public https page from reaching `localhost`
+   unless you allow "local network access", which headless and embedded browsers can't. The server
+   also hands this link to the agent: in `open_video_studio`'s result and in every
+   `ui_not_connected`. Once the tab is open, don't call `open_video_studio` again -- it registers a
+   second, competing UI instance that retires the tab.
 3. Interactive `codex` asks you to approve each tool call. Headless `codex exec` can't ask, so it
    rejects them ("requires approval, but approval policy is never") unless the server's tools are
    pre-approved: add `default_tools_approval_mode = "approve"` under
