@@ -101,6 +101,19 @@ loads the sample itself, and serves `seek` and `capture_frame`. Under that stric
 stays blocked: the chapters text track is a `data:` URL, so the timeline's hover preview has no
 chapter title inside the MCP App.
 
+### Findings from the live Claude chat test (0.1.3)
+
+Claude Desktop starts one server process per connection: an era probe, `local-agent-mode` (Code
+sessions) and `claude-ai` (the chat). The chat's connection advertises MCP Apps support
+(`{"mimeTypes":["text/html;profile=mcp-app"]}`, logged by the server on initialize), yet it still
+never sent `resources/read` for the studio -- why is not known; our tool and resource metadata
+match the spec and render in the spec-compliant host test. The chat's agent used the `uiUrl`
+fallback instead and completed load, seek and capture through it, which surfaced three fixes (0.1.4):
+a repeat `open_video_studio` no longer retires the live tab; `capture_frame`'s inline image stays
+under ~512 KB (Claude rejected the 1.4 MB encoded PNG as "tool result too large"); and a background
+tab -- where Chrome doesn't load video until it's shown -- now yields `video_not_ready` with a
+"bring the tab to the front" hint plus a "▶ Show this tab" title, instead of a silent 00:00.
+
 ### Hosts without MCP App rendering (e.g. a Claude Code session)
 
 Found live (2026-09-26): with the `.mcpb` installed, a Claude Code session in Claude Desktop can call

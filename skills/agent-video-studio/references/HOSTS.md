@@ -59,6 +59,12 @@ that becomes the UI when opened in any browser tab (an agent with a built-in bro
 itself). Until something connects, other tools return `ui_not_connected` with the same link after
 about 12 s, instead of queuing jobs no UI will run.
 
+Keep that tab in front while the agent works: Chrome doesn't load video in a tab that has never been
+shown. The tools report it (`load_video` notes it, `seek`/`capture_frame` return `video_not_ready`
+with a hint), and the tab's title changes to "▶ Show this tab" until someone looks at it. Images
+that `capture_frame` returns inline are kept under ~512 KB (a JPEG copy if needed) so hosts with a
+1 MB tool-result limit accept them; the saved frame keeps full quality.
+
 ## Codex CLI (HTTP bus)
 
 Codex CLI has no MCP App rendering, so a plain browser tab of the site acts as its UI instead:
