@@ -15,9 +15,9 @@ carries the same steps as part of the installable skill bundle.
 | ChatGPT Desktop / Codex sessions in a Chromium browser | site tools (same WebMCP registration) | Unverified -- depends on host-side model/version support (see Unverified items) |
 | MCP-B extension (`@mcp-b/global`) | polyfill + cross-tab transport | **Verified** -- this is also the fallback that makes native WebMCP-less browsers work at all |
 | Claude in Chrome / Claude Desktop's own browser | `window.agentVideo` scripting bridge | **Verified** |
-| Claude Desktop | `.mcpb` MCP App | **Verified** -- the built bundle; live install in Claude Desktop itself not yet run (see Unverified items) |
+| Claude Desktop | `.mcpb` MCP App | **Installed live** -- installs, starts and answers `initialize`/`tools/list`/`resources/list` in Claude Desktop; the inline/PiP render in a chat is not yet observed (see Unverified items) |
 | ChatGPT Desktop / VS Code / a Claude connector | MCP-over-HTTP connector | Not run -- needs a public HTTPS tunnel; see below |
-| Codex CLI (no browser UI) | HTTP command bus driving a normal tab | **Verified** |
+| Codex CLI (no browser UI) | HTTP command bus driving a normal tab | **Verified live** with codex-cli 0.153.4 (see below) |
 
 ### Chrome 152+ (native WebMCP)
 
@@ -90,11 +90,25 @@ verification -- see Unverified items.
 Codex CLI has no MCP App rendering, so a plain browser tab of the site acts as its UI instead:
 
 ```bash
-codex mcp add agent-video-studio -- node <repo>/server/dist/stdio.js   # after npm run build:server
+codex mcp add agent-video-studio --env BUS_PORT=3334 -- node <repo>/server/dist/stdio.js   # after npm run build:server
 ```
 
-then open the site (deployed, or `npm run dev`) with `?bus=http://localhost:3333` in a normal
-browser tab.
+then open the site (deployed, or `npm run dev`) with `?bus=http://localhost:3334` in a normal
+browser tab. Codex gets its own bus port because the Claude Desktop extension, once installed,
+keeps its server running with the bus on the default 3333 (observed live: Claude Desktop holding
+`*:3333`), and a second server could still bind `localhost:3333` alongside it -- so a tab pointed at
+the shared port can attach to the wrong server and every Codex call returns `ui_not_connected`.
+
+For headless `codex exec` (no one to click "approve"), pre-approve this server's tools, or every call
+fails with "MCP tool call requires approval, but approval policy is never":
+
+```toml
+[mcp_servers.agent-video-studio]
+default_tools_approval_mode = "approve"
+```
+
+(or `-c 'mcp_servers.agent-video-studio.default_tools_approval_mode="approve"'` for a single run).
+Interactive `codex` just asks for approval per call.
 
 **Do not also call `open_video_studio` in this mode.** It registers a second, competing UI
 instance via the command bus's own `registerInstance`, which always retires every other instance
@@ -107,6 +121,16 @@ Verified end to end via `tests/e2e/bus-http.spec.ts`: a real spawned `server/std
 real MCP client, and a real browser tab opened with `?bus=<url>` -- `load_video`, `seek`, and
 `capture_frame` (including a real returned `image` content block) all round-trip correctly through
 the bus's actual HTTP routes and the tab's own poll loop.
+
+**Verified live with the real Codex CLI (2026-09-26, codex-cli 0.153.4):** `codex exec` started the
+built `server/dist/stdio.js` (BUS_PORT 3334, tools pre-approved as above) and, against a real Chrome
+tab of `npm run dev` opened with `?bus=http://localhost:3334`, called `load_video` (Sprite Fight),
+`get_state`, `seek` 1:24, `capture_frame` (1280x720), `add_chapter` "Camp Site" 01:05-04:10,
+`add_note` at 01:24 and `export_notes` markdown -- all seven completed, the tab's Activity showed
+each as `MCP bus`, and the exported Markdown carried the right timestamps
+(`- [01:05.000 → 04:10.000] Camp Site`, `- [01:24.000] Tent spotted near the fire`). A hidden or
+background tab is not a reliable UI instance: its throttled timers delayed registration long enough
+that an earlier run got `ui_not_connected`.
 
 ## Unverified items
 
@@ -128,11 +152,11 @@ Tracked here rather than silently assumed, per this project's own verification d
   own persistent OPFS/IndexedDB origin inside a real Claude Desktop install, or something more
   ephemeral -- has not been observed live, since that needs a real Claude Desktop app. Whoever runs
   TS-009 first should note the console's `[mcp-app] storage probe:` line here.
-- **A real Claude Desktop `.mcpb` install**: the bundle itself (`npm run mcp:bundle`) is verified --
-  built, unpacked to an isolated directory, and run with zero dependency on this repo's own
-  `node_modules` (see the Task 11 Deviations entries) -- but installing it inside an actual Claude
-  Desktop app and exercising TS-009's own steps has not been done in this repository's own
-  verification.
+- **The MCP App render inside a Claude Desktop chat**: the `.mcpb` was installed in a real
+  Claude Desktop (2026-09-26) and its log shows the server starting and answering `initialize`,
+  `tools/list` and `resources/list`. What has not been observed yet is TS-009's own steps: a chat
+  calling `open_video_studio` and the studio rendering inline and in PiP, which needs someone to
+  send that chat message.
 - **ChatGPT Desktop / VS Code / a Claude connector over a real HTTPS tunnel**: the Streamable HTTP
   transport (`server/http.ts`) is covered by `server.test.ts`'s in-memory-transport tests, but
   connecting an actual one of these hosts through a real `cloudflared` tunnel (TS-011 steps 1-2)
