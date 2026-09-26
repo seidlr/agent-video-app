@@ -55,7 +55,7 @@ export interface CreateServerOptions {
  */
 export function createServer(busSessionId: string, bus: CommandBus, options: CreateServerOptions = {}): McpServer {
   const readAppHtml = options.readAppHtml ?? readBundledAppHtml;
-  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.1' });
+  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.2' });
 
   registerAppTool(
     server,
@@ -68,13 +68,14 @@ export function createServer(busSessionId: string, bus: CommandBus, options: Cre
         id: z.string().optional(),
         url: z.string().optional(),
       }),
+      // The tool names its UI and who may call it; everything about how that UI is sandboxed lives
+      // on the resource below (MCP Apps spec). No `domain`: the format is host-issued (e.g.
+      // `{hash}.claudemcpcontent.com`) and the studio needs no stable origin -- it talks to this
+      // server over postMessage, and its CDNs allow any origin.
       _meta: {
         ui: {
           resourceUri: RESOURCE_URI,
           visibility: ['model', 'app'],
-          csp: { connectDomains: connectDomains(), resourceDomains: resourceDomains(), frameDomains: FRAME_DOMAINS },
-          domain: 'agent-video-studio',
-          prefersBorder: false,
         },
       },
     },
@@ -92,7 +93,19 @@ export function createServer(busSessionId: string, bus: CommandBus, options: Cre
   );
 
   registerAppResource(server, 'Agent Video Studio', RESOURCE_URI, { mimeType: RESOURCE_MIME_TYPE }, async () => ({
-    contents: [{ uri: RESOURCE_URI, mimeType: RESOURCE_MIME_TYPE, text: await readAppHtml() }],
+    contents: [
+      {
+        uri: RESOURCE_URI,
+        mimeType: RESOURCE_MIME_TYPE,
+        text: await readAppHtml(),
+        _meta: {
+          ui: {
+            csp: { connectDomains: connectDomains(), resourceDomains: resourceDomains(), frameDomains: FRAME_DOMAINS },
+            prefersBorder: false,
+          },
+        },
+      },
+    ],
   }));
 
   for (const tool of manifest) {

@@ -37,6 +37,27 @@ test.describe('MCP server (Task 11)', () => {
     await client.close();
   });
 
+  // MCP Apps spec (2026-01-26): csp/domain/prefersBorder are resource metadata, set on the read
+  // result's contents; a tool's _meta.ui carries only resourceUri + visibility. Found live: with
+  // them on the tool (and a bare `domain: 'agent-video-studio'`, not a host-issued domain like
+  // `{hash}.claudemcpcontent.com`), Claude Desktop showed "There was a problem displaying content"
+  // and never even read the ui:// resource.
+  test('app metadata follows the MCP Apps spec: UI hints on the resource, not the tool', async () => {
+    const { client } = await connect();
+
+    const { tools } = await client.listTools();
+    const open = tools.find((t) => t.name === 'open_video_studio')!;
+    const toolUi = (open._meta as { ui?: Record<string, unknown> }).ui!;
+    expect(Object.keys(toolUi).sort()).toEqual(['resourceUri', 'visibility']);
+
+    const resource = await client.readResource({ uri: 'ui://agent-video-studio/app.html' });
+    const resourceUi = (resource.contents[0] as { _meta?: { ui?: Record<string, unknown> } })._meta?.ui;
+    expect(resourceUi).toMatchObject({ prefersBorder: false, csp: { connectDomains: expect.arrayContaining(['https://files.vidstack.io']) } });
+    expect(resourceUi).not.toHaveProperty('domain');
+
+    await client.close();
+  });
+
   test('open_video_studio tells a host that cannot render MCP Apps which page to open instead', async () => {
     const uiUrl = 'https://example.test/studio/?bus=http://localhost:3333';
     const server = createServer('test-session', createCommandBus({ uiFallbackUrl: uiUrl }), {

@@ -8,13 +8,17 @@ const CONTEXT_UPDATE_DEBOUNCE_MS = 1000;
 const POLL_ERROR_BACKOFF_MS = 1000;
 const RETIRED_RETRY_MS = 500;
 
-/** Detection per the plan's own Key Decisions: a sandboxed MCP App iframe has an opaque origin
- * (`window.location.origin === 'null'`); `?mcp=1` covers a host that renders the same bundle in a
- * normal (non-opaque-origin) frame. */
+/** An MCP App view: an opaque-origin sandbox (`window.location.origin === 'null'`), any framed page,
+ * or `?mcp=1`. Framed covers hosts that serve the view from a real sandbox origin (the MCP Apps
+ * spec's `domain`, e.g. `{hash}.claudemcpcontent.com`), which the opaque-origin check alone missed:
+ * the studio then booted as a plain site and never talked to the host. The site is never framed
+ * otherwise -- the standalone tab, the `?bus=` tab and Claude Desktop's browser pane are all
+ * top-level (checked live). */
 export function isMcpAppContext(): boolean {
   if (typeof window === 'undefined') return false;
   if (window.location.origin === 'null') return true;
-  return new URLSearchParams(window.location.search).get('mcp') === '1';
+  if (new URLSearchParams(window.location.search).get('mcp') === '1') return true;
+  return window.self !== window.top;
 }
 
 function sleep(ms: number): Promise<void> {

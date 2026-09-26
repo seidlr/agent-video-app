@@ -283,6 +283,12 @@ const ACTIVITY_LIMIT = 200;
 /** Upper bound on how long seek() waits for a "seeked" event before resolving anyway -- see the
  * comment at its call site (vidstack's YouTube provider does not reliably dispatch it). */
 const SEEK_FALLBACK_MS = 1500;
+/** How long seek() waits for a just-loaded video to mount and become playable before seeking. */
+const PLAYER_READY_TIMEOUT_MS = 10_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 let idCounter = 0;
 function nextId(prefix: string): string {
@@ -591,6 +597,16 @@ export function createStudioStore() {
       }
     },
     async seek(time, opts) {
+      // A seek issued while a video is still loading -- before the player has mounted, or before it
+      // has metadata -- was dropped by the browser, yet the tool reported ok at 00:00 (found live in
+      // the MCP App, where the view starts the load itself and the agent seeks right after). Wait,
+      // bounded, until the player exists and can play; immediate when it already can.
+      if (get().source) {
+        const deadline = Date.now() + PLAYER_READY_TIMEOUT_MS;
+        while (!playerHandle && Date.now() < deadline) await sleep(50);
+        const ready = playerHandle?.canPlayQueue?.waitForFlush();
+        if (ready) await Promise.race([ready, sleep(Math.max(0, deadline - Date.now()))]);
+      }
       const handle = playerHandle;
       if (!handle) {
         set((s) => ({ player: { ...s.player, currentTime: Math.max(0, time) } }));
@@ -618,6 +634,11 @@ export function createStudioStore() {
         opts?.signal?.addEventListener('abort', onAbort, { once: true });
         handle.currentTime = clamped;
       });
+      // The store's playhead otherwise follows only the player's time-update event, which a freshly
+      // loaded, not-yet-decoded video doesn't fire after a seek: the tool then read 0 and reported
+      // "00:00" although the player sat at the requested time. Take it from the player directly.
+      const actual = handle.currentTime;
+      if (Number.isFinite(actual)) set((s) => ({ player: { ...s.player, currentTime: actual } }));
     },
     setPlayerVolume(v) {
       if (playerHandle) playerHandle.volume = v;
