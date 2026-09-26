@@ -6,6 +6,7 @@ import { listLibraryAssets, readLibraryFile, removeLibraryAsset } from '../../st
 import type { StudioStore } from '../../store/studio';
 import { isMcpAppContext } from '../mcpApp';
 import type { Registry, ToolResult } from '../registry';
+import { askToShowTab, isTabHidden } from '../../lib/tabVisibility';
 
 /** Agent-facing source names (`library`) intentionally differ from the internal AssetKind
  * (`file`) -- `library` reads better as "a video already in your library" from an agent's
@@ -67,7 +68,13 @@ export function defineLibraryTools(registry: Registry, store: StudioStore): void
       try {
         await loadSource(store.getState(), { kind, id: args.id, url: args.url });
         const source = store.getState().source;
-        return { ok: true, summary: `Loaded "${source?.title}"`, source: source ? { kind: source.kind, title: source.title } : null };
+        const summary = `Loaded "${source?.title}"`;
+        const loaded = { source: source ? { kind: source.kind, title: source.title } : null };
+        if (isTabHidden()) {
+          askToShowTab();
+          return { ok: true, summary: `${summary} -- but this tab is in the background, so Chrome won't load the video until it's shown. Ask the user to bring it to the front before seeking or capturing.`, tabHidden: true, ...loaded };
+        }
+        return { ok: true, summary, ...loaded };
       } catch (error) {
         return { ok: false, error: `load_failed: ${errorMessage(error)}`, hint: 'Check the id/url and try again.' };
       }

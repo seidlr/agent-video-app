@@ -8,6 +8,44 @@ import { deletePersistedFrame, persistFrame, persistThumbnails } from '../../sto
 import { tryPersist } from '../../store/persist';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
+import { askToShowTab, HIDDEN_TAB_HINT, isTabHidden } from '../../lib/tabVisibility';
+
+/** `video_not_ready`, with the reason when it's the common one: a background tab. */
+function notReady(): { ok: false; error: 'video_not_ready'; hint?: string } {
+  if (!isTabHidden()) return { ok: false, error: 'video_not_ready' };
+  askToShowTab();
+  return { ok: false, error: 'video_not_ready', hint: HIDDEN_TAB_HINT };
+}
+
+/** An inline image travels inside a tool result, and hosts cap those -- Claude rejects results over
+ * 1 MB, base64 included (found live: a 1280x720 PNG capture came back at ~1.4 MB encoded). The
+ * inline copy stays under this many raw bytes; the stored and downloaded frame keeps full quality. */
+const INLINE_IMAGE_BUDGET_BYTES = 512 * 1024;
+
+/** The image returned inline: the capture itself when it fits the budget, otherwise a JPEG copy,
+ * at full size if that fits and progressively smaller if not. */
+async function inlineImage(blob: Blob): Promise<{ dataUrl: string; resized?: { width: number; height: number } }> {
+  if (blob.size <= INLINE_IMAGE_BUDGET_BYTES) return { dataUrl: await blobToDataUrl(blob) };
+  const bitmap = await createImageBitmap(blob);
+  try {
+    let smallest: { blob: Blob; width: number; height: number } | undefined;
+    for (const targetWidth of [bitmap.width, 1024, 768, 512]) {
+      if (targetWidth > bitmap.width) continue;
+      const width = Math.round(targetWidth);
+      const height = Math.round((bitmap.height * width) / bitmap.width);
+      const canvas = new OffscreenCanvas(width, height);
+      canvas.getContext('2d')!.drawImage(bitmap, 0, 0, width, height);
+      for (const quality of [0.85, 0.7]) {
+        const jpeg = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+        smallest = { blob: jpeg, width, height };
+        if (jpeg.size <= INLINE_IMAGE_BUDGET_BYTES) return { dataUrl: await blobToDataUrl(jpeg), resized: { width, height } };
+      }
+    }
+    return { dataUrl: await blobToDataUrl(smallest!.blob), resized: { width: smallest!.width, height: smallest!.height } };
+  } finally {
+    bitmap.close();
+  }
+}
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -62,7 +100,7 @@ export async function runCaptureFrame(store: StudioStore, args: CaptureFrameArgs
       hint: 'No direct pixel access to a YouTube iframe. Use the tab-capture button in the player chrome to enable it for this video.',
     };
   }
-  if (!video) return { ok: false, error: 'video_not_ready' };
+  if (!video) return notReady();
 
   let previousTime: number | undefined;
   if (args.time !== undefined) {
@@ -98,7 +136,7 @@ export async function runCaptureFrame(store: StudioStore, args: CaptureFrameArgs
     return {
       ok: false,
       error: result.error,
-      hint: result.error === 'source_not_capturable' ? 'Load a CORS-enabled URL or a local file instead.' : undefined,
+      hint: result.error === 'source_not_capturable' ? 'Load a CORS-enabled URL or a local file instead.' : result.error === 'video_not_ready' ? notReady().hint : undefined,
     };
   }
 
@@ -114,11 +152,13 @@ export async function runCaptureFrame(store: StudioStore, args: CaptureFrameArgs
   const frameId = store.getState().addFrame({ time: capturedAt, kind: 'frame', width: result.width, height: result.height, downloadedAs, blobUrl });
   await tryPersist(store.getState(), () => persistFrame({ id: frameId, time: capturedAt, kind: 'frame', width: result.width, height: result.height, blob: result.blob, downloadedAs }));
 
-  const dataUrl = args.includeDataUrl ? await blobToDataUrl(result.blob) : undefined;
+  const inline = args.includeDataUrl ? await inlineImage(result.blob) : undefined;
+  const dataUrl = inline?.dataUrl;
+  const inlineNote = inline?.resized ? `; inline copy is a ${inline.resized.width}x${inline.resized.height} JPEG to fit tool-result size limits` : '';
 
   return {
     ok: true,
-    summary: `Captured frame at ${secsToTimecode(capturedAt)} (${result.width}x${result.height})${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}`,
+    summary: `Captured frame at ${secsToTimecode(capturedAt)} (${result.width}x${result.height})${downloadedAs ? `, saved to Downloads as ${downloadedAs}` : ''}${inlineNote}`,
     frameId,
     width: result.width,
     height: result.height,

@@ -2,6 +2,7 @@ import { parseTime } from '../../lib/time';
 import { secsToTimecode } from '../../lib/time';
 import type { StudioStore } from '../../store/studio';
 import type { Registry, ToolResult } from '../registry';
+import { askToShowTab, HIDDEN_TAB_HINT, isTabHidden } from '../../lib/tabVisibility';
 
 function playbackSummary(store: StudioStore): string {
   const p = store.getState().player;
@@ -59,6 +60,13 @@ export function definePlaybackTools(registry: Registry, store: StudioStore): voi
         return { ok: false, error: 'invalid_time', hint: 'Use seconds, a timecode, "+N"/"-N", "N%", or "fN".' };
       }
       await store.getState().seek(target);
+      // A video that never loaded (still no duration after seek's own bounded wait) can't have
+      // been seeked; say so rather than answer ok at 00:00.
+      const { source, player } = store.getState();
+      if (source && player.duration === 0) {
+        if (isTabHidden()) askToShowTab();
+        return { ok: false, error: 'video_not_ready', hint: isTabHidden() ? HIDDEN_TAB_HINT : 'The video has not loaded yet. Retry in a moment.' };
+      }
       return { ok: true, summary: playbackSummary(store) };
     },
   });

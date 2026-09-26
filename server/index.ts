@@ -55,7 +55,7 @@ export interface CreateServerOptions {
  */
 export function createServer(busSessionId: string, bus: CommandBus, options: CreateServerOptions = {}): McpServer {
   const readAppHtml = options.readAppHtml ?? readBundledAppHtml;
-  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.3' });
+  const server = new McpServer({ name: 'agent-video-studio', version: '0.1.4' });
 
   // Whether this client said it can render MCP Apps (the `io.modelcontextprotocol/ui` extension).
   // Logged to stderr -- a host's extension log -- because "the studio never appeared" is otherwise
